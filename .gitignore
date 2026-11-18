@@ -1,0 +1,26 @@
+# =====================================================================
+# GITIGNORE - SISTEMA DE GESTÃO DE AUTOESCOLA
+# =====================================================================
+
+# Arquivo com credenciais de banco de dados e senhas reais (NUNCA SUBIR)
+.env
+.env.local
+.env.*.local
+
+# Dependências Node.js
+node_modules/
+
+# Build e empacotamento
+api-integracoes/target/
+out/
+release/
+
+# Logs e arquivos temporários do sistema
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.log
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

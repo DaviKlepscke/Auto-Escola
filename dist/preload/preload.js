@@ -1,0 +1,48 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const electron_1 = require("electron");
+
+const api = {
+    getAppVersion: () => electron_1.ipcRenderer.invoke('app:version'),
+    getDashboardStats: () => electron_1.ipcRenderer.invoke('dashboard:stats'),
+    testarConexaoBD: () => electron_1.ipcRenderer.invoke('database:test'),
+
+    // Alunos
+    listarAlunos: (filtro) => electron_1.ipcRenderer.invoke('alunos:listar', filtro),
+    salvarAluno: (aluno) => electron_1.ipcRenderer.invoke('alunos:salvar', aluno),
+    importarAlunosCSV: (alunos) => electron_1.ipcRenderer.invoke('alunos:importar-csv', alunos),
+    obterCargaHoraria: (alunoId) => electron_1.ipcRenderer.invoke('alunos:obter-carga-horaria', alunoId),
+
+    // Instrutores
+    listarInstrutores: () => electron_1.ipcRenderer.invoke('instrutores:listar'),
+    salvarInstrutor: (instrutor) => electron_1.ipcRenderer.invoke('instrutores:salvar', instrutor),
+    importarInstrutoresCSV: (instrutores) => electron_1.ipcRenderer.invoke('instrutores:importar-csv', instrutores),
+
+    // Frota / Veículos
+    listarVeiculos: () => electron_1.ipcRenderer.invoke('veiculos:listar'),
+    salvarVeiculo: (veiculo) => electron_1.ipcRenderer.invoke('veiculos:salvar', veiculo),
+    atualizarKmVeiculo: (id, novoKm, registrarRevisao) =>
+        electron_1.ipcRenderer.invoke('veiculos:atualizar-km', id, novoKm, registrarRevisao),
+    importarVeiculosCSV: (veiculos) => electron_1.ipcRenderer.invoke('veiculos:importar-csv', veiculos),
+
+    // Turmas e Salas (Limite de 20 alunos)
+    listarSalas: () => electron_1.ipcRenderer.invoke('salas:listar'),
+    listarTurmas: () => electron_1.ipcRenderer.invoke('turmas:listar'),
+    salvarTurma: (turma) => electron_1.ipcRenderer.invoke('turmas:salvar', turma),
+    listarAlunosTurma: (turmaId) => electron_1.ipcRenderer.invoke('turmas:listar-alunos', turmaId),
+    matricularAlunoTurma: (turmaId, alunoId) =>
+        electron_1.ipcRenderer.invoke('turmas:matricular', turmaId, alunoId),
+    desmatricularAlunoTurma: (turmaId, alunoId) =>
+        electron_1.ipcRenderer.invoke('turmas:desmatricular', turmaId, alunoId),
+
+    // Aulas Práticas (Prevenção de Conflitos e Aulas Noturnas)
+    listarAulasPraticas: (data) => electron_1.ipcRenderer.invoke('aulas:listar-praticas', data),
+    salvarAulaPratica: (aula) => electron_1.ipcRenderer.invoke('aulas:salvar-pratica', aula),
+    atualizarStatusAulaPratica: (aulaId, status) =>
+        electron_1.ipcRenderer.invoke('aulas:atualizar-status-pratica', aulaId, status),
+
+    // Exames
+    listarExames: () => electron_1.ipcRenderer.invoke('exames:listar')
+};
+
+electron_1.contextBridge.exposeInMainWorld('electronAPI', api);
