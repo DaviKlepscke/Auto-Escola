@@ -1,17 +1,27 @@
 // =====================================================================
-// CONTROLADOR DE TELA E RENDERIZAÇÃO (FRONT-END BOOTSTRAP) - SPRINT 2
-// Especialistas: frontend_electron, electron_core, autoescola_expert
+// CONTROLADOR DE TELA E RENDERIZAÇÃO (FRONT-END BOOTSTRAP) - SPRINT 2 & 3
+// Especialistas: frontend_electron, electron_core, autoescola_expert, seguranca
 // =====================================================================
 
 import { Validators } from './validators.js';
 import { CSVManager } from './csvManager.js';
+
+export function escapeHtml(text) {
+  if (text === null || text === undefined) return '';
+  return String(text)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
 
 let csvTipoAtual = 'alunos';
 let dadosCSVValidados = [];
 let turmaSelecionadaId = null;
 
 document.addEventListener('DOMContentLoaded', async () => {
-  console.log('[Front-End] Inicializando interface de atendimento do CFC (Sprint 2)...');
+  console.log('[Front-End] Inicializando interface de atendimento do CFC...');
 
   // Testar Conexão com o Banco Local / Remoto
   try {
@@ -46,10 +56,18 @@ document.addEventListener('DOMContentLoaded', async () => {
   configurarImportacaoCSV();
   configurarFiltrosAlunos();
 
-  // Sprint 2: Configurar Agendamento Inteligente & Turmas
+  // Agendamento Inteligente & Turmas
   configurarFormularioNovaTurma();
   configurarGerenciadorMatriculas();
   configurarFormularioAgendarPratica();
+
+  // Exames & Retestes
+  configurarFormularioAgendarExame();
+  configurarFormularioLancarResultado();
+  configurarFiltrosExames();
+
+  // Notificações Automáticas 24h
+  configurarDisparoNotificacoes();
 });
 
 // ================= DASHBOARD =================
@@ -122,14 +140,14 @@ async function carregarAlunos() {
 
   tbody.innerHTML = alunos.map(a => `
     <tr>
-      <td class="fw-bold">${a.nome}</td>
-      <td><code>${a.cpf}</code></td>
-      <td>${a.renach || '<span class="text-muted">Pendente</span>'}</td>
-      <td><span class="badge bg-primary">Cat ${a.categoria_pretendida}</span></td>
-      <td>${a.telefone}</td>
-      <td><span class="badge bg-info text-dark">${a.status_processo}</span></td>
+      <td class="fw-bold">${escapeHtml(a.nome)}</td>
+      <td><code>${escapeHtml(a.cpf)}</code></td>
+      <td>${a.renach ? escapeHtml(a.renach) : '<span class="text-muted">Pendente</span>'}</td>
+      <td><span class="badge bg-primary">Cat ${escapeHtml(a.categoria_pretendida)}</span></td>
+      <td>${escapeHtml(a.telefone)}</td>
+      <td><span class="badge bg-info text-dark">${escapeHtml(a.status_processo)}</span></td>
       <td>
-        <button class="btn btn-sm btn-outline-primary btn-ver-carga-horaria" data-id="${a.id}" data-nome="${a.nome}" title="Ficha de Carga Horária DETRAN">
+        <button class="btn btn-sm btn-outline-primary btn-ver-carga-horaria" data-id="${a.id}" data-nome="${escapeHtml(a.nome)}" title="Ficha de Carga Horária DETRAN">
           <i class="bi bi-person-lines-fill me-1"></i> Carga Horária
         </button>
       </td>
@@ -199,13 +217,13 @@ async function carregarInstrutores() {
 
   tbody.innerHTML = inst.map(i => `
     <tr>
-      <td class="fw-bold">${i.nome}</td>
-      <td><code>${i.credencial_detran}</code></td>
-      <td><span class="badge ${i.tipo === 'TEORICO' ? 'bg-info text-dark' : 'bg-primary'}">${i.tipo}</span></td>
+      <td class="fw-bold">${escapeHtml(i.nome)}</td>
+      <td><code>${escapeHtml(i.credencial_detran)}</code></td>
+      <td><span class="badge ${i.tipo === 'TEORICO' ? 'bg-info text-dark' : 'bg-primary'}">${escapeHtml(i.tipo)}</span></td>
       <td>
         ${i.habilita_veiculos_pesados ? '<span class="badge bg-warning text-dark"><i class="bi bi-truck me-1"></i>Sim (Cat C, D, E)</span>' : '<span class="badge bg-light text-muted">Apenas Leves</span>'}
       </td>
-      <td>${i.telefone}</td>
+      <td>${escapeHtml(i.telefone)}</td>
       <td><span class="badge bg-success">Ativo</span></td>
     </tr>
   `).join('');
@@ -260,11 +278,11 @@ async function carregarTurmas() {
 
   tbody.innerHTML = turmas.map(t => `
     <tr>
-      <td><strong class="text-primary">${t.codigo}</strong></td>
-      <td><span class="badge bg-secondary">${t.sala_nome}</span></td>
-      <td>${t.instrutor_nome}</td>
-      <td>${t.data_inicio} até ${t.data_fim}</td>
-      <td>${t.horario_inicio} às ${t.horario_fim}</td>
+      <td><strong class="text-primary">${escapeHtml(t.codigo)}</strong></td>
+      <td><span class="badge bg-secondary">${escapeHtml(t.sala_nome)}</span></td>
+      <td>${escapeHtml(t.instrutor_nome)}</td>
+      <td>${escapeHtml(t.data_inicio)} até ${escapeHtml(t.data_fim)}</td>
+      <td>${escapeHtml(t.horario_inicio)} às ${escapeHtml(t.horario_fim)}</td>
       <td>
         <div class="d-flex align-items-center gap-2">
           <div class="progress flex-grow-1" style="height: 6px;">
@@ -275,9 +293,9 @@ async function carregarTurmas() {
           </span>
         </div>
       </td>
-      <td><span class="badge bg-primary">${t.status}</span></td>
+      <td><span class="badge bg-primary">${escapeHtml(t.status)}</span></td>
       <td>
-        <button class="btn btn-sm btn-outline-primary btn-gerenciar-matriculas" data-id="${t.id}" data-codigo="${t.codigo}" data-sala="${t.sala_nome}" data-total="${t.total_alunos}">
+        <button class="btn btn-sm btn-outline-primary btn-gerenciar-matriculas" data-id="${t.id}" data-codigo="${escapeHtml(t.codigo)}" data-sala="${escapeHtml(t.sala_nome)}" data-total="${t.total_alunos}">
           <i class="bi bi-people-fill me-1"></i> Matrículas
         </button>
       </td>
@@ -426,17 +444,17 @@ async function carregarAulasPraticas() {
 
   tbody.innerHTML = aulas.map(a => `
     <tr>
-      <td>${a.data_aula}</td>
-      <td><strong>${a.horario_inicio} - ${a.horario_fim}</strong></td>
-      <td class="fw-bold">${a.aluno_nome}</td>
-      <td>${a.instrutor_nome}</td>
-      <td>${a.veiculo_modelo} (<code>${a.veiculo_placa}</code>)</td>
+      <td>${escapeHtml(a.data_aula)}</td>
+      <td><strong>${escapeHtml(a.horario_inicio)} - ${escapeHtml(a.horario_fim)}</strong></td>
+      <td class="fw-bold">${escapeHtml(a.aluno_nome)}</td>
+      <td>${escapeHtml(a.instrutor_nome)}</td>
+      <td>${escapeHtml(a.veiculo_modelo)} (<code>${escapeHtml(a.veiculo_placa)}</code>)</td>
       <td>${a.eh_noturna ? '<span class="badge bg-dark"><i class="bi bi-moon-stars me-1"></i>Noturna</span>' : '<span class="badge bg-light text-muted">Diurna</span>'}</td>
       <td>
         ${a.alerta_chuva ? '<span class="badge bg-warning text-dark"><i class="bi bi-cloud-rain me-1"></i>Chuva (Reagendar)</span>' : '<span class="badge bg-success">Clima Bom</span>'}
       </td>
       <td>
-        <span class="badge ${a.status === 'REALIZADA' ? 'bg-success' : (a.status === 'FALTOU' ? 'bg-danger' : 'bg-primary')}">${a.status}</span>
+        <span class="badge ${a.status === 'REALIZADA' ? 'bg-success' : (a.status === 'FALTOU' ? 'bg-danger' : 'bg-primary')}">${escapeHtml(a.status)}</span>
       </td>
       <td>
         ${a.status === 'AGENDADA' ? `
@@ -510,6 +528,9 @@ function configurarFormularioAgendarPratica() {
       // Se categoria A, sugere alerta meteorológico se marcado
       if (cat === 'A') {
         checkChuva.parentElement.parentElement.classList.remove('d-none');
+        window.electronAPI.consultarClima('São Paulo', document.getElementById('inputPraticaData').value, 'A').then(clima => {
+          checkChuva.checked = clima.alertaChuva;
+        });
       } else {
         checkChuva.parentElement.parentElement.classList.add('d-none');
         checkChuva.checked = false;
@@ -551,23 +572,113 @@ function configurarFormularioAgendarPratica() {
 // ================= EXAMES =================
 async function carregarExames() {
   if (!window.electronAPI) return;
-  const exames = await window.electronAPI.listarExames();
+  const filtroTipo = document.getElementById('filtro-tipo-exame')?.value;
+  const filtroStatus = document.getElementById('filtro-status-exame')?.value;
+
+  const exames = await window.electronAPI.listarExames({ tipo: filtroTipo, status: filtroStatus });
   const tbody = document.querySelector('#tabela-exames tbody');
   if (!tbody) return;
 
+  if (exames.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-3">Nenhum exame cadastrado com os filtros selecionados.</td></tr>';
+    return;
+  }
+
   tbody.innerHTML = exames.map(e => `
     <tr>
-      <td class="fw-bold">${e.aluno_nome}</td>
-      <td><span class="badge bg-dark">${e.tipo}</span></td>
-      <td>Cat ${e.categoria}</td>
-      <td>${e.data_exame}</td>
-      <td>${e.horario} - ${e.local_exame}</td>
-      <td><span class="badge ${e.status === 'APROVADO' ? 'bg-success' : (e.status === 'REPROVADO' ? 'bg-danger' : 'bg-primary')}">${e.status}</span></td>
+      <td class="fw-bold">${escapeHtml(e.aluno_nome)}</td>
+      <td><span class="badge ${e.tipo === 'TEORICO' ? 'bg-info text-dark' : 'bg-dark'}">${escapeHtml(e.tipo)}</span></td>
+      <td><span class="badge bg-primary">Cat ${escapeHtml(e.categoria)}</span></td>
+      <td>${escapeHtml(e.data_exame)}</td>
+      <td>${escapeHtml(e.horario)} - <small class="text-muted">${escapeHtml(e.local_exame)}</small></td>
       <td>
-        ${e.eh_reteste ? `<span class="badge bg-warning text-dark">Reteste (R$ ${e.valor_taxa})</span>` : '<span class="badge bg-light text-muted">1º Exame</span>'}
+        <span class="badge ${e.status === 'APROVADO' ? 'bg-success' : (e.status === 'REPROVADO' ? 'bg-danger' : (e.status === 'AUSENTE' ? 'bg-warning text-dark' : 'bg-primary'))}">
+          ${escapeHtml(e.status)}
+        </span>
+        ${e.pontuacao_teorica !== null && e.pontuacao_teorica !== undefined ? `<br><small class="text-muted">Nota: ${e.pontuacao_teorica}/30</small>` : ''}
+      </td>
+      <td>
+        ${e.eh_reteste ? `
+          <div class="small">
+            <span class="badge bg-warning text-dark">Reteste</span><br>
+            ${e.taxa_reteste_paga ? '<span class="text-success fw-bold">Taxa Paga</span>' : `<span class="text-danger fw-bold">Taxa Pendente (R$ ${e.valor_taxa})</span>`}
+          </div>
+        ` : '<span class="badge bg-light text-muted">1º Exame</span>'}
+      </td>
+      <td>
+        <div class="btn-group btn-group-sm">
+          ${e.status === 'AGENDADO' ? `
+            <button class="btn btn-outline-primary btn-lancar-resultado" data-id="${e.id}" data-aluno="${escapeHtml(e.aluno_nome)}" data-tipo="${e.tipo}" data-data="${e.data_exame}" data-hora="${e.horario}" title="Registrar Nota ou Resultado Oficial">
+              <i class="bi bi-clipboard2-check me-1"></i> Lançar Resultado
+            </button>
+          ` : ''}
+          ${e.eh_reteste && !e.taxa_reteste_paga ? `
+            <button class="btn btn-sm btn-outline-success btn-quitar-taxa" data-id="${e.id}" title="Registrar Quitação da Taxa">
+              <i class="bi bi-cash-coin me-1"></i> Quitar Taxa
+            </button>
+          ` : ''}
+          ${e.status !== 'AGENDADO' && (!e.eh_reteste || e.taxa_reteste_paga) ? '<span class="text-muted small">Concluído</span>' : ''}
+        </div>
       </td>
     </tr>
   `).join('');
+
+  // Eventos: Lançar Resultado
+  tbody.querySelectorAll('.btn-lancar-resultado').forEach(btn => {
+    btn.addEventListener('click', (ev) => {
+      const b = ev.currentTarget;
+      const exameId = parseInt(b.getAttribute('data-id'), 10);
+      document.getElementById('resultadoExameId').value = exameId;
+      document.getElementById('resultadoExameAlunoInfo').textContent = `${b.getAttribute('data-aluno')} - Exame ${b.getAttribute('data-tipo')}`;
+      document.getElementById('resultadoExameDataInfo').textContent = `Agendado para: ${b.getAttribute('data-data')} às ${b.getAttribute('data-hora')}`;
+
+      const tipo = b.getAttribute('data-tipo');
+      const grupoTeorica = document.getElementById('grupoPontuacaoTeorica');
+      const grupoReprov = document.getElementById('grupoMotivoReprovacao');
+      const selectStatus = document.getElementById('selectResultadoStatus');
+
+      selectStatus.value = 'APROVADO';
+      if (tipo === 'TEORICO') {
+        grupoTeorica.classList.remove('d-none');
+      } else {
+        grupoTeorica.classList.add('d-none');
+      }
+      grupoReprov.classList.add('d-none');
+
+      selectStatus.onchange = () => {
+        if (selectStatus.value === 'REPROVADO') {
+          grupoReprov.classList.remove('d-none');
+        } else {
+          grupoReprov.classList.add('d-none');
+        }
+      };
+
+      const modal = new bootstrap.Modal(document.getElementById('modalLancarResultadoExame'));
+      modal.show();
+    });
+  });
+
+  // Eventos: Quitar Taxa de Reteste
+  tbody.querySelectorAll('.btn-quitar-taxa').forEach(btn => {
+    btn.addEventListener('click', async (ev) => {
+      const exameId = parseInt(ev.currentTarget.getAttribute('data-id'), 10);
+      if (confirm('Confirmar o recebimento e a quitação da taxa de reteste (R$ 120,00)?')) {
+        const res = await window.electronAPI.quitarTaxaReteste(exameId);
+        if (res.success) {
+          alert('Taxa de reteste quitada com sucesso!');
+          await carregarExames();
+          await carregarDashboard();
+        } else {
+          alert('Erro ao quitar taxa: ' + res.error);
+        }
+      }
+    });
+  });
+}
+
+function configurarFiltrosExames() {
+  document.getElementById('filtro-tipo-exame')?.addEventListener('change', carregarExames);
+  document.getElementById('filtro-status-exame')?.addEventListener('change', carregarExames);
 }
 
 function configurarFiltrosAlunos() {
@@ -864,4 +975,148 @@ function renderizarPreviewCSV(resultado) {
       </td>
     </tr>
   `).join('');
+}
+
+// ================= AGENDAMENTO E RESULTADOS DE EXAMES =================
+function configurarFormularioAgendarExame() {
+  const form = document.getElementById('formAgendarExame');
+  if (!form) return;
+
+  const selectTipo = document.getElementById('selectExameTipo');
+  const selectAluno = document.getElementById('selectExameAluno');
+  const selectCat = document.getElementById('selectExameCategoria');
+  const selectVeic = document.getElementById('selectExameVeiculo');
+  const grupoVeic = document.getElementById('grupoExameVeiculo');
+  const grupoTurma = document.getElementById('grupoExameTurmaCodigo');
+  const avisoAluno = document.getElementById('avisoAlunoExame');
+
+  async function atualizarAlunosAptos() {
+    const tipo = selectTipo.value;
+    if (tipo === 'TEORICO') {
+      grupoVeic.classList.add('d-none');
+      grupoTurma.classList.remove('d-none');
+    } else {
+      grupoVeic.classList.remove('d-none');
+      grupoTurma.classList.add('d-none');
+    }
+
+    const aptos = await window.electronAPI.obterAlunosAptosExame(tipo);
+    const elegiveis = aptos.filter(a => a.apto);
+
+    if (elegiveis.length === 0) {
+      selectAluno.innerHTML = '<option value="">Nenhum aluno apto no momento para este exame</option>';
+      avisoAluno.textContent = 'Não há alunos com os pré-requisitos cumpridos para este tipo de exame.';
+    } else {
+      selectAluno.innerHTML = elegiveis.map(a => `
+        <option value="${a.id}" data-cat="${a.categoria_pretendida}">
+          ${escapeHtml(a.nome)} (CPF: ${escapeHtml(a.cpf)}) - Cat ${escapeHtml(a.categoria_pretendida)}
+        </option>
+      `).join('');
+      avisoAluno.textContent = `${elegiveis.length} aluno(s) apto(s) com pré-requisitos DETRAN cumpridos.`;
+    }
+
+    if (tipo === 'PRATICO') {
+      const veics = await window.electronAPI.listarVeiculos();
+      const veicsDisp = veics.filter(v => v.status !== 'INATIVO' && v.status !== 'EM_MANUTENCAO');
+      selectVeic.innerHTML = veicsDisp.map(v => `
+        <option value="${v.id}">${escapeHtml(v.modelo)} (${escapeHtml(v.placa)}) - Cat ${escapeHtml(v.categoria)}</option>
+      `).join('');
+    }
+  }
+
+  selectTipo.addEventListener('change', atualizarAlunosAptos);
+  document.querySelector('[data-bs-target="#modalAgendarExame"]')?.addEventListener('click', atualizarAlunosAptos);
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const alunoId = parseInt(selectAluno.value, 10);
+    if (!alunoId) {
+      alert('Selecione um aluno apto para agendar o exame.');
+      return;
+    }
+
+    const tipo = selectTipo.value;
+    const exame = {
+      aluno_id: alunoId,
+      tipo: tipo,
+      categoria: selectCat.value,
+      data_exame: document.getElementById('inputExameData').value,
+      horario: document.getElementById('inputExameHorario').value,
+      local_exame: document.getElementById('inputExameLocal').value.trim(),
+      veiculo_id: tipo === 'PRATICO' ? parseInt(selectVeic.value, 10) : undefined,
+      turma_exame_codigo: tipo === 'TEORICO' ? document.getElementById('inputExameTurmaCodigo').value.trim() : undefined,
+      status: 'AGENDADO',
+      eh_reteste: false,
+      taxa_reteste_paga: true,
+      valor_taxa: 0.00
+    };
+
+    const res = await window.electronAPI.agendarExame(exame);
+    if (res.success) {
+      alert('Exame agendado com sucesso e validado pelo motor DETRAN!');
+      bootstrap.Modal.getInstance(document.getElementById('modalAgendarExame'))?.hide();
+      form.reset();
+      await carregarExames();
+      await carregarDashboard();
+    } else {
+      alert('Bloqueio no Agendamento de Exame:\n' + res.error);
+    }
+  });
+}
+
+function configurarFormularioLancarResultado() {
+  const form = document.getElementById('formLancarResultadoExame');
+  if (!form) return;
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const exameId = parseInt(document.getElementById('resultadoExameId').value, 10);
+    const status = document.getElementById('selectResultadoStatus').value;
+    const pontuacao = parseInt(document.getElementById('inputPontuacaoTeorica').value, 10);
+    const motivo = document.getElementById('inputMotivoReprovacao').value.trim();
+
+    const dados = {
+      status,
+      pontuacao_teorica: isNaN(pontuacao) ? undefined : pontuacao,
+      motivo_reprovacao: status === 'REPROVADO' ? motivo : undefined,
+      valor_taxa_reteste: status === 'REPROVADO' ? 120.00 : 0.00
+    };
+
+    const res = await window.electronAPI.lancarResultadoExame(exameId, dados);
+    if (res.success) {
+      alert('Resultado do exame lançado com sucesso! Histórico e status do aluno atualizados.');
+      bootstrap.Modal.getInstance(document.getElementById('modalLancarResultadoExame'))?.hide();
+      await carregarExames();
+      await carregarAlunos();
+      await carregarDashboard();
+    } else {
+      alert('Erro ao gravar resultado: ' + res.error);
+    }
+  });
+}
+
+// ================= NOTIFICAÇÕES 24H =================
+function configurarDisparoNotificacoes() {
+  const btn = document.getElementById('btnDispararNotificacoes');
+  if (!btn) return;
+
+  btn.addEventListener('click', async () => {
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Disparando...';
+
+    const res = await window.electronAPI.dispararNotificacoes24h();
+    btn.disabled = false;
+    btn.innerHTML = '<i class="bi bi-bell-fill text-warning"></i> Disparar Lembretes 24h';
+
+    document.getElementById('notifTotalEnviadas').textContent = `${res.totalEnviadas} notificações disparadas`;
+    const lista = document.getElementById('listaNotificacoesDisparadas');
+    if (res.detalhes.length === 0) {
+      lista.innerHTML = '<li class="list-group-item text-muted">Nenhuma aula prática ou exame agendado para as próximas 24 horas.</li>';
+    } else {
+      lista.innerHTML = res.detalhes.map(d => `<li class="list-group-item text-dark">${escapeHtml(d)}</li>`).join('');
+    }
+
+    const modal = new bootstrap.Modal(document.getElementById('modalNotificacoesDisparadas'));
+    modal.show();
+  });
 }

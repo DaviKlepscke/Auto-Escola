@@ -1,7 +1,7 @@
 # 🗄️ Modelo Entidade-Relacionamento (DER) - MySQL
 ### Sistema de Gestão de Autoescola
 **Autor:** Agente Especialista em Banco de Dados (`database_mysql`)  
-**Scripts:** [database/schema.sql](file:///C:/Users/aluno/AppData/Projeto-Auto%20Escola/database/schema.sql) | [database/seeds.sql](file:///C:/Users/aluno/AppData/Projeto-Auto%20Escola/database/seeds.sql) | [scripts/setup-db.js](file:///C:/Users/aluno/AppData/Projeto-Auto%20Escola/scripts/setup-db.js)
+**Scripts:** [database/schema.sql](file:///C:/Users/bsant/Downloads/Auto-Escola-main/database/schema.sql) | [database/seeds.sql](file:///C:/Users/bsant/Downloads/Auto-Escola-main/database/seeds.sql) | [database/banco-completo.sql](file:///C:/Users/bsant/Downloads/Auto-Escola-main/database/banco-completo.sql) | [scripts/setup-db.js](file:///C:/Users/bsant/Downloads/Auto-Escola-main/scripts/setup-db.js)
 
 > [!IMPORTANT]
 > **Isolamento de Banco Compartilhado:** Todas as tabelas deste projeto utilizam estritamente o prefixo **`ae_`** para garantir que outras tabelas de outros projetos escolares coexistindo na mesma base de dados não sofram interferência ou perda acidental.

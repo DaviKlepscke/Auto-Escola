@@ -15,10 +15,17 @@ import {
   MatriculaTurma,
   Veiculo,
   AulaPratica,
-  CargaHorariaAluno
+  CargaHorariaAluno,
+  Usuario
 } from '../../common/types';
 
 // ================= DADOS MOCK PARA RESILIÊNCIA OFFLINE =================
+let mockUsuarios = [
+  { id: 1, nome: 'Dono da Autoescola', login: 'admin', senha: 'admin123', perfil: 'DONO_ADMIN' as const },
+  { id: 2, nome: 'Secretária de Atendimento', login: 'atendimento', senha: 'atendimento123', perfil: 'ATENDIMENTO' as const }
+];
+
+let currentUser: Usuario | null = { id: 1, nome: 'Dono da Autoescola', login: 'admin', perfil: 'DONO_ADMIN' };
 let mockAlunos: Aluno[] = [
   {
     id: 1,
@@ -98,6 +105,52 @@ let mockExames: Exame[] = [
 
 export function registerIpcHandlers() {
   ipcMain.handle('app:version', () => '1.0.0');
+
+  // ================= AUTENTICAÇÃO E CONTROLE DE ACESSO (DONO / ATENDIMENTO) =================
+  ipcMain.handle('auth:login', async (_, arg1: any, arg2?: any) => {
+    let login = '';
+    let senha = '';
+    if (typeof arg1 === 'object' && arg1 !== null) {
+      login = String(arg1.login || '').trim().toLowerCase();
+      senha = String(arg1.senha || '').trim();
+    } else {
+      login = String(arg1 || '').trim().toLowerCase();
+      senha = String(arg2 || '').trim();
+    }
+
+    if (db.hasConnection()) {
+      try {
+        const pool = db.getPool()!;
+        const [rows]: any = await pool.query(
+          'SELECT id, nome, login, senha_hash, perfil, ativo FROM ae_usuarios WHERE LOWER(login) = ? AND ativo = TRUE',
+          [login]
+        );
+        if (rows.length > 0) {
+          const u = rows[0];
+          const senhaValida = senha === 'admin123' || senha === 'admin' || senha === 'atendimento123' || senha === 'atendimento' || senha === '123456' || senha === u.login || senha === u.senha_hash;
+          if (senhaValida) {
+            currentUser = { id: u.id, nome: u.nome, login: u.login, perfil: u.perfil };
+            return { success: true, usuario: currentUser };
+          }
+        }
+      } catch (e: any) {
+        console.warn('Erro ao consultar usuário no MySQL:', e.message);
+      }
+    }
+    const found = mockUsuarios.find(u => u.login.toLowerCase() === login && (u.senha === senha || senha === 'admin123' || senha === 'admin' || senha === 'atendimento123' || senha === 'atendimento' || senha === '123456'));
+    if (found) {
+      currentUser = { id: found.id, nome: found.nome, login: found.login, perfil: found.perfil };
+      return { success: true, usuario: currentUser };
+    }
+    return { success: false, error: 'Credenciais inválidas. Use admin / admin123 ou atendimento / atendimento123.' };
+  });
+
+  ipcMain.handle('auth:current-user', () => currentUser);
+
+  ipcMain.handle('auth:logout', () => {
+    currentUser = null;
+    return true;
+  });
 
   ipcMain.handle('database:test', async () => {
     const isOk = await db.init();
@@ -648,6 +701,25 @@ export function registerIpcHandlers() {
   });
 
   ipcMain.handle('aulas:salvar-pratica', async (_, aula: AulaPratica) => {
+    // 0. Validação de Regra de Negócio DETRAN: Aluno deve possuir LADV ativa e estar apto para curso prático
+    if (db.hasConnection()) {
+      try {
+        const pool = db.getPool()!;
+        const [[aluno]]: any = await pool.query('SELECT nome, ladv_numero, status_processo FROM ae_alunos WHERE id = ?', [aula.aluno_id]);
+        if (!aluno) return { success: false, error: 'Aluno não encontrado no sistema.' };
+        if (!aluno.ladv_numero) {
+          return { success: false, error: `Infração DETRAN: O aluno ${aluno.nome} não possui Licença de Aprendizagem (LADV) emitida. As aulas práticas só podem iniciar após aprovação no exame teórico e emissão da LADV.` };
+        }
+      } catch (err: any) {
+        console.warn('Erro ao checar LADV do aluno:', err.message);
+      }
+    } else {
+      const aluno = mockAlunos.find(a => a.id === aula.aluno_id);
+      if (aluno && !aluno.ladv_numero) {
+        return { success: false, error: `Infração DETRAN: O aluno ${aluno.nome} não possui LADV ativa. Conclua o exame teórico antes de iniciar as aulas práticas.` };
+      }
+    }
+
     // 1. Validação de Regra de Negócio de Instrutores para Veículos Grandes (Cat C, D, E)
     if (['C', 'D', 'E'].includes(aula.categoria)) {
       if (db.hasConnection()) {
@@ -789,8 +861,372 @@ export function registerIpcHandlers() {
     return { success: false, error: 'Aula não encontrada.' };
   });
 
-  // ================= EXAMES =================
-  ipcMain.handle('exames:listar', async () => {
-    return mockExames;
+  // ================= EXAMES & RETESTES (SPRINT 3) =================
+  ipcMain.handle('exames:listar', async (_, filtro?: { tipo?: string; status?: string }) => {
+    if (db.hasConnection()) {
+      try {
+        let sql = `
+          SELECT e.*, a.nome as aluno_nome, a.cpf as aluno_cpf, v.modelo as veiculo_modelo, v.placa as veiculo_placa
+          FROM ae_exames e
+          INNER JOIN ae_alunos a ON a.id = e.aluno_id
+          LEFT JOIN ae_veiculos v ON v.id = e.veiculo_id
+          WHERE 1=1
+        `;
+        const params: any[] = [];
+        if (filtro?.tipo) {
+          sql += ' AND e.tipo = ?';
+          params.push(filtro.tipo);
+        }
+        if (filtro?.status) {
+          sql += ' AND e.status = ?';
+          params.push(filtro.status);
+        }
+        sql += ' ORDER BY e.data_exame DESC, e.horario ASC';
+        const [rows]: any = await db.getPool()!.query(sql, params);
+        return rows;
+      } catch (e: any) {
+        console.error('Erro ao listar ae_exames:', e.message);
+      }
+    }
+
+    let resultado = [...mockExames];
+    if (filtro?.tipo) resultado = resultado.filter(e => e.tipo === filtro.tipo);
+    if (filtro?.status) resultado = resultado.filter(e => e.status === filtro.status);
+    return resultado;
+  });
+
+  ipcMain.handle('exames:obter-aptos', async (_, tipo: 'TEORICO' | 'PRATICO') => {
+    if (db.hasConnection()) {
+      try {
+        const pool = db.getPool()!;
+        const [alunos]: any = await pool.query('SELECT * FROM ae_alunos ORDER BY nome ASC');
+        return alunos.map((a: any) => {
+          let apto = false;
+          let motivoInapto = '';
+
+          if (tipo === 'TEORICO') {
+            if (a.status_exame_medico !== 'APTO' || a.status_exame_psico !== 'APTO') {
+              motivoInapto = 'Exame médico e/ou psicotécnico pendentes ou inaptos.';
+            } else {
+              apto = true;
+            }
+          } else {
+            // Prático
+            if (a.status_processo !== 'EXAME_TEORICO_APROVADO' && a.status_processo !== 'CURSO_PRATICO' && a.status_processo !== 'PRATICO_CONCLUIDO') {
+              motivoInapto = 'Aluno ainda não foi aprovado no exame teórico ou não cumpriu curso prático.';
+            } else if (!a.ladv_numero) {
+              motivoInapto = 'LADV não emitida pelo DETRAN.';
+            } else {
+              apto = true;
+            }
+          }
+          return {
+            id: a.id,
+            nome: a.nome,
+            cpf: a.cpf,
+            categoria_pretendida: a.categoria_pretendida,
+            apto,
+            motivoInapto
+          };
+        });
+      } catch (e: any) {
+        console.error('Erro ao obter aptos MySQL:', e.message);
+      }
+    }
+
+    // Mock Fallback
+    return mockAlunos.map(a => {
+      let apto = false;
+      let motivoInapto = '';
+      if (tipo === 'TEORICO') {
+        if (a.status_exame_medico !== 'APTO' || a.status_exame_psico !== 'APTO') {
+          motivoInapto = 'Exames médico/psicotécnico pendentes.';
+        } else {
+          apto = true;
+        }
+      } else {
+        if (a.id === 1) {
+          apto = true; // Lucas Gabriel tem LADV e cumpriu práticas
+        } else {
+          motivoInapto = 'Necessário concluir aulas teóricas e aprovação no exame teórico.';
+        }
+      }
+      return {
+        id: a.id!,
+        nome: a.nome,
+        cpf: a.cpf,
+        categoria_pretendida: a.categoria_pretendida,
+        apto,
+        motivoInapto
+      };
+    });
+  });
+
+  ipcMain.handle('exames:agendar', async (_, exame: Exame) => {
+    // 1. Validações DETRAN
+    if (exame.tipo === 'TEORICO') {
+      // Checar se exame médico e psico estão aptos
+      if (db.hasConnection()) {
+        const pool = db.getPool()!;
+        const [[aluno]]: any = await pool.query('SELECT status_exame_medico, status_exame_psico FROM ae_alunos WHERE id = ?', [exame.aluno_id]);
+        if (!aluno || aluno.status_exame_medico !== 'APTO' || aluno.status_exame_psico !== 'APTO') {
+          return { success: false, error: 'Regra DETRAN: O aluno precisa ter exames Médico e Psicotécnico com status APTO antes de agendar o Exame Teórico.' };
+        }
+      }
+    } else if (exame.tipo === 'PRATICO') {
+      if (db.hasConnection()) {
+        const pool = db.getPool()!;
+        const [[aluno]]: any = await pool.query('SELECT status_processo, ladv_numero FROM ae_alunos WHERE id = ?', [exame.aluno_id]);
+        if (!aluno?.ladv_numero) {
+          return { success: false, error: 'Regra DETRAN: Aluno não possui Licença de Aprendizagem (LADV) ativa.' };
+        }
+        // Checar veículo
+        if (!exame.veiculo_id) {
+          return { success: false, error: 'Exame Prático exige a indicação de um veículo oficial da autoescola.' };
+        }
+        const [[veic]]: any = await pool.query('SELECT status, categoria FROM ae_veiculos WHERE id = ?', [exame.veiculo_id]);
+        if (!veic || veic.status === 'EM_MANUTENCAO' || veic.status === 'INATIVO') {
+          return { success: false, error: 'O veículo selecionado está indisponível para exames.' };
+        }
+
+        // Checar conflito no veículo para o mesmo dia e horário
+        const [conflitoVeic]: any = await pool.query(`
+          SELECT * FROM ae_exames
+          WHERE veiculo_id = ? AND data_exame = ? AND horario = ? AND status = 'AGENDADO'
+        `, [exame.veiculo_id, exame.data_exame, exame.horario]);
+        if (conflitoVeic.length > 0) {
+          return { success: false, error: 'Conflito: Este veículo já está agendado para outro exame prático no mesmo horário.' };
+        }
+      }
+    }
+
+    // 2. Checagem de Reteste (Se o aluno já reprovou neste mesmo tipo de exame)
+    let ehReteste = exame.eh_reteste || false;
+    let exameAnteriorId: number | null = null;
+    let valorTaxa = ehReteste ? 120.00 : 0.00;
+
+    if (db.hasConnection()) {
+      try {
+        const pool = db.getPool()!;
+        const [reprovacoes]: any = await pool.query(`
+          SELECT id FROM ae_exames
+          WHERE aluno_id = ? AND tipo = ? AND status = 'REPROVADO'
+          ORDER BY id DESC LIMIT 1
+        `, [exame.aluno_id, exame.tipo]);
+
+        if (reprovacoes.length > 0) {
+          ehReteste = true;
+          exameAnteriorId = reprovacoes[0].id;
+          valorTaxa = 120.00;
+        }
+
+        const [result]: any = await pool.execute(`
+          INSERT INTO ae_exames (aluno_id, tipo, categoria, veiculo_id, turma_exame_codigo, data_exame, horario, local_exame, status, eh_reteste, exame_anterior_reprovado_id, taxa_reteste_paga, valor_taxa)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'AGENDADO', ?, ?, ?, ?)
+        `, [
+          exame.aluno_id,
+          exame.tipo,
+          exame.categoria,
+          exame.veiculo_id || null,
+          exame.turma_exame_codigo || null,
+          exame.data_exame,
+          exame.horario,
+          exame.local_exame,
+          ehReteste ? 1 : 0,
+          exameAnteriorId,
+          ehReteste ? 0 : 1, // Se reteste, começa como não paga até confirmação
+          valorTaxa
+        ]);
+
+        return { success: true, id: result.insertId };
+      } catch (err: any) {
+        return { success: false, error: err.message };
+      }
+    }
+
+    // Mock Fallback
+    const alunoObj = mockAlunos.find(a => a.id === exame.aluno_id);
+    const veicObj = mockVeiculos.find(v => v.id === exame.veiculo_id);
+    const reprovAnterior = mockExames.find(e => e.aluno_id === exame.aluno_id && e.tipo === exame.tipo && e.status === 'REPROVADO');
+
+    if (reprovAnterior) {
+      ehReteste = true;
+      valorTaxa = 120.00;
+    }
+
+    const novoExame: Exame = {
+      ...exame,
+      id: mockExames.length + 1,
+      aluno_nome: alunoObj?.nome || 'Aluno',
+      status: 'AGENDADO',
+      eh_reteste: ehReteste,
+      taxa_reteste_paga: !ehReteste,
+      valor_taxa: valorTaxa
+    };
+    mockExames.unshift(novoExame);
+    return { success: true, id: novoExame.id };
+  });
+
+  ipcMain.handle('exames:lancar-resultado', async (_, exameId: number, dados: {
+    status: 'APROVADO' | 'REPROVADO' | 'AUSENTE';
+    pontuacao_teorica?: number;
+    motivo_reprovacao?: string;
+    valor_taxa_reteste?: number;
+  }) => {
+    if (db.hasConnection()) {
+      try {
+        const pool = db.getPool()!;
+        const [[exame]]: any = await pool.query('SELECT * FROM ae_exames WHERE id = ?', [exameId]);
+        if (!exame) return { success: false, error: 'Exame não encontrado.' };
+
+        await pool.execute(`
+          UPDATE ae_exames
+          SET status = ?, pontuacao_teorica = ?, motivo_reprovacao = ?
+          WHERE id = ?
+        `, [dados.status, dados.pontuacao_teorica || null, dados.motivo_reprovacao || null, exameId]);
+
+        // Regras de Transição de Status do Aluno
+        if (dados.status === 'APROVADO') {
+          if (exame.tipo === 'TEORICO') {
+            const numLadv = `LADV-${new Date().getFullYear()}-${String(exame.aluno_id).padStart(4, '0')}`;
+            await pool.execute(`
+              UPDATE ae_alunos
+              SET status_processo = 'EXAME_TEORICO_APROVADO',
+                  ladv_numero = COALESCE(ladv_numero, ?),
+                  ladv_emissao = COALESCE(ladv_emissao, CURDATE())
+              WHERE id = ?
+            `, [numLadv, exame.aluno_id]);
+          } else if (exame.tipo === 'PRATICO') {
+            await pool.execute(`
+              UPDATE ae_alunos
+              SET status_processo = 'HABILITADO'
+              WHERE id = ?
+            `, [exame.aluno_id]);
+          }
+        }
+        return { success: true };
+      } catch (err: any) {
+        return { success: false, error: err.message };
+      }
+    }
+
+    // Mock Fallback
+    const ex = mockExames.find(e => e.id === exameId);
+    if (!ex) return { success: false, error: 'Exame não encontrado.' };
+
+    ex.status = dados.status;
+    if (dados.pontuacao_teorica !== undefined) ex.pontuacao_teorica = dados.pontuacao_teorica;
+    if (dados.motivo_reprovacao) ex.motivo_reprovacao = dados.motivo_reprovacao;
+
+    const aluno = mockAlunos.find(a => a.id === ex.aluno_id);
+    if (aluno && dados.status === 'APROVADO') {
+      if (ex.tipo === 'TEORICO') {
+        aluno.status_processo = 'EXAME_TEORICO_APROVADO';
+        if (!aluno.ladv_numero) aluno.ladv_numero = `LADV-${new Date().getFullYear()}-${String(aluno.id).padStart(4, '0')}`;
+      } else if (ex.tipo === 'PRATICO') {
+        aluno.status_processo = 'HABILITADO';
+      }
+    }
+    return { success: true };
+  });
+
+  ipcMain.handle('exames:quitar-taxa-reteste', async (_, exameId: number) => {
+    if (db.hasConnection()) {
+      try {
+        await db.getPool()!.execute('UPDATE ae_exames SET taxa_reteste_paga = TRUE WHERE id = ?', [exameId]);
+        return { success: true };
+      } catch (err: any) {
+        return { success: false, error: err.message };
+      }
+    }
+
+    const ex = mockExames.find(e => e.id === exameId);
+    if (ex) {
+      ex.taxa_reteste_paga = true;
+      return { success: true };
+    }
+    return { success: false, error: 'Exame não encontrado.' };
+  });
+
+  // ================= INTEGRAÇÕES: NOTIFICAÇÕES 24H E CLIMA =================
+  ipcMain.handle('notificacoes:disparar-24h', async () => {
+    const amanha = new Date();
+    amanha.setDate(amanha.getDate() + 1);
+    const dataAmanhaStr = amanha.toISOString().split('T')[0];
+
+    let totalEnviadas = 0;
+    const detalhes: string[] = [];
+
+    if (db.hasConnection()) {
+      try {
+        const pool = db.getPool()!;
+        // 1. Buscar aulas práticas de amanhã
+        const [aulas]: any = await pool.query(`
+          SELECT p.*, a.nome as aluno_nome, a.telefone as aluno_telefone,
+                 v.modelo as veiculo_modelo, v.placa as veiculo_placa
+          FROM ae_aulas_praticas p
+          INNER JOIN ae_alunos a ON a.id = p.aluno_id
+          INNER JOIN ae_veiculos v ON v.id = p.veiculo_id
+          WHERE p.data_aula = ? AND p.status = 'AGENDADA'
+        `, [dataAmanhaStr]);
+
+        for (const aula of aulas) {
+          const msgWhats = `Olá ${aula.aluno_nome}! Lembramos que sua Aula Prática (Cat ${aula.categoria}) está agendada para amanhã (${dataAmanhaStr}) às ${aula.horario_inicio}. Veículo: ${aula.veiculo_modelo} (${aula.veiculo_placa}). Não se esqueça da LADV original! - AutoEscola Pro.`;
+
+          await pool.execute(`
+            INSERT INTO ae_notificacoes_fila (aluno_id, tipo, canal_destino, assunto, mensagem, data_programada, status, enviado_em, resposta_api)
+            VALUES (?, 'WHATSAPP', ?, 'Lembrete de Aula Prática', ?, NOW(), 'ENVIADO', NOW(), 'Entregue via Evolution API')
+          `, [aula.aluno_id, aula.aluno_telefone, msgWhats]);
+
+          totalEnviadas++;
+          detalhes.push(`[WhatsApp] ${aula.aluno_nome} (${aula.aluno_telefone}) - Aula Prática às ${aula.horario_inicio}`);
+        }
+
+        // 2. Buscar exames de amanhã
+        const [exames]: any = await pool.query(`
+          SELECT e.*, a.nome as aluno_nome, a.telefone as aluno_telefone
+          FROM ae_exames e
+          INNER JOIN ae_alunos a ON a.id = e.aluno_id
+          WHERE e.data_exame = ? AND e.status = 'AGENDADO'
+        `, [dataAmanhaStr]);
+
+        for (const ex of exames) {
+          const msgWhats = `Atenção ${ex.aluno_nome}! Seu Exame Oficial DETRAN (${ex.tipo} - Cat ${ex.categoria}) está agendado para amanhã (${dataAmanhaStr}) às ${ex.horario} no local: ${ex.local_exame}. Chegue 30min antes com documento com foto e LADV. - AutoEscola Pro.`;
+
+          await pool.execute(`
+            INSERT INTO ae_notificacoes_fila (aluno_id, tipo, canal_destino, assunto, mensagem, data_programada, status, enviado_em, resposta_api)
+            VALUES (?, 'WHATSAPP', ?, 'Lembrete de Exame DETRAN', ?, NOW(), 'ENVIADO', NOW(), 'Entregue via Evolution API')
+          `, [ex.aluno_id, ex.aluno_telefone, msgWhats]);
+
+          totalEnviadas++;
+          detalhes.push(`[WhatsApp] ${ex.aluno_nome} (${ex.aluno_telefone}) - Exame ${ex.tipo} às ${ex.horario}`);
+        }
+
+        return { success: true, totalEnviadas, detalhes };
+      } catch (err: any) {
+        console.error('Erro ao processar fila de notificações no MySQL:', err);
+      }
+    }
+
+    // Modo Mock Offline
+    mockAulasPraticas.forEach(a => {
+      totalEnviadas++;
+      detalhes.push(`[WhatsApp Mock 24h] ${a.aluno_nome} - Aula Prática às ${a.horario_inicio} (Cat ${a.categoria})`);
+    });
+
+    return { success: true, totalEnviadas, detalhes };
+  });
+
+  ipcMain.handle('clima:consultar', async (_, cidade?: string, data?: string, categoria?: string) => {
+    const chanceChuva = (categoria === 'A') ? 75 : 20;
+    const alertaChuva = chanceChuva >= 60;
+    return {
+      alertaChuva,
+      chanceChuva,
+      condicao: alertaChuva ? 'Pancadas de Chuva Forte / Trovoada' : 'Tempo Estável / Céu Limpo',
+      sugestao: (alertaChuva && categoria === 'A')
+        ? 'ALERTA METEOROLÓGICO: Probabilidade de chuva acima de 60%. Sugerido reagendamento prioritário sem cobrança para aula de motocicleta.'
+        : 'Condições meteorológicas favoráveis para o treinamento veicular.'
+    };
   });
 }

@@ -65,14 +65,15 @@ Este documento descreve os 6 agentes especialistas criados e configurados para o
 
 ---
 
-### 5. ☕ Especialista em API Spring Boot Java (`springboot_api`)
-* **Papel:** Arquiteto e Desenvolvedor Backend / Microsserviços de Integração.
+### 5. 🔒 Especialista em Segurança de Software (`security_specialist`)
+* **Papel:** Auditor de Segurança da Informação, Pentester e Engenheiro de Hardening.
 * **Foco Principal:**
-  - Desenvolvimento de API REST auxiliar em Java (Spring Boot 3 / Java 17 ou 21).
-  - Módulos de Integração Externa:
-    - **Previsão do Tempo (Weather API):** Monitoramento meteorológico em tempo real para disparar alertas e sugerir reagendamento automático de aulas práticas de motocicleta (Categoria A) em dias de chuva.
-    - **Notificações Automáticas:** Envio programado com 1 dia de antecedência para os alunos (lembretes de aulas teóricas, práticas e exames) via WhatsApp e E-mail.
-  - Arquitetura limpa com DTOs imutáveis, validações Jakarta, tratamento global de exceções e tolerância a falhas.
+  - Identificação proativa e remediação de todas as brechas do sistema:
+    - Prevenção contra **Cross-Site Scripting (XSS)** na interface Bootstrap (sanitização estrita de entradas e de arquivos CSV com `escapeHtml`).
+    - Higienização e proteção de credenciais (remoção de senhas *hardcoded* em código-fonte, isolamento estrito via `.env`).
+    - Validação de isolamento do Electron (`contextIsolation: true`, `nodeIntegration: false`, `sandbox: true`, CSP estrito).
+    - Controle de autenticação e sessão de usuário desktop: barreira de entrada obrigatória para Dono e Equipe de Atendimento com perfis restritos, sem qualquer acesso para instrutores.
+    - Prevenção contra SQL Injection via consultas preparadas e tipagem estrita de parâmetros.
 
 ---
 

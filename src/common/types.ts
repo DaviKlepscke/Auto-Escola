@@ -5,6 +5,13 @@
 
 export type PerfilUsuario = 'DONO_ADMIN' | 'ATENDIMENTO';
 
+export interface Usuario {
+  id: number;
+  nome: string;
+  login: string;
+  perfil: PerfilUsuario;
+}
+
 export type CategoriaCNH = 'A' | 'B' | 'AB' | 'C' | 'D' | 'E';
 
 export type StatusProcessoAluno =
@@ -162,6 +169,11 @@ export interface IElectronAPI {
   getDashboardStats: () => Promise<DashboardStats>;
   testarConexaoBD: () => Promise<{ success: boolean; message: string; host?: string; database?: string }>;
 
+  // Autenticação & Segurança (Restrito ao Dono e Atendimento)
+  login: (login: string, senha: string) => Promise<{ success: boolean; usuario?: Usuario; error?: string }>;
+  obterUsuarioAtual: () => Promise<Usuario | null>;
+  logout: () => Promise<boolean>;
+
   // Alunos
   listarAlunos: (filtro?: { categoria?: string; status?: string }) => Promise<Aluno[]>;
   salvarAluno: (aluno: Aluno) => Promise<{ success: boolean; id?: number; error?: string }>;
@@ -192,8 +204,21 @@ export interface IElectronAPI {
   salvarAulaPratica: (aula: AulaPratica) => Promise<{ success: boolean; id?: number; error?: string }>;
   atualizarStatusAulaPratica: (aulaId: number, status: 'REALIZADA' | 'FALTOU' | 'CANCELADA') => Promise<{ success: boolean; error?: string }>;
 
-  // Exames
-  listarExames: () => Promise<Exame[]>;
+  // Exames (Sprint 3: Gestão de Exames, Resultados e Retestes)
+  listarExames: (filtro?: { tipo?: string; status?: string }) => Promise<Exame[]>;
+  agendarExame: (exame: Exame) => Promise<{ success: boolean; id?: number; error?: string }>;
+  lancarResultadoExame: (exameId: number, dados: {
+    status: 'APROVADO' | 'REPROVADO' | 'AUSENTE';
+    pontuacao_teorica?: number;
+    motivo_reprovacao?: string;
+    valor_taxa_reteste?: number;
+  }) => Promise<{ success: boolean; error?: string }>;
+  quitarTaxaReteste: (exameId: number) => Promise<{ success: boolean; error?: string }>;
+  obterAlunosAptosExame: (tipo: 'TEORICO' | 'PRATICO') => Promise<Array<{ id: number; nome: string; cpf: string; categoria_pretendida: string; apto: boolean; motivoInapto?: string }>>;
+
+  // Integrações: Notificações 24h & Previsão do Tempo
+  dispararNotificacoes24h: () => Promise<{ success: boolean; totalEnviadas: number; detalhes: string[] }>;
+  consultarClima: (cidade?: string, data?: string, categoria?: string) => Promise<{ alertaChuva: boolean; chanceChuva: number; condicao: string; sugestao: string }>;
 }
 
 declare global {

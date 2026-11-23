@@ -74,12 +74,19 @@
       <header class="bg-white border-bottom px-4 py-2 d-flex justify-content-between align-items-center shadow-sm">
         <h4 class="mb-0 fw-semibold text-dark" id="page-title">Painel Operacional</h4>
         <div class="d-flex align-items-center gap-2">
+          <button class="btn btn-sm btn-outline-warning text-dark d-flex align-items-center gap-1" id="btnDispararNotificacoes" title="Dispara lembretes automáticos com 1 dia de antecedência">
+            <i class="bi bi-bell-fill text-warning"></i> Disparar Lembretes 24h
+          </button>
           <button class="btn btn-sm btn-outline-success d-flex align-items-center gap-1 btn-abrir-import-csv" data-tipo="alunos">
             <i class="bi bi-filetype-csv"></i> Importar CSV Alunos
           </button>
           <button class="btn btn-sm btn-primary d-flex align-items-center gap-1" data-bs-toggle="modal" data-bs-target="#modalNovoAluno">
             <i class="bi bi-person-plus-fill"></i> Novo Aluno
           </button>
+          <div class="vr mx-1"></div>
+          <span class="badge bg-secondary p-2" id="badgeUsuarioLogado">
+            <i class="bi bi-person-badge me-1"></i> Dono & Atendimento
+          </span>
         </div>
       </header>
 
@@ -384,9 +391,28 @@
         <!-- 7. EXAMES -->
         <div class="tab-pane fade" id="view-exames" role="tabpanel">
           <div class="card border-0 shadow-sm">
-            <div class="card-header bg-white py-3 border-0">
-              <h5 class="mb-0 fw-bold">Gestão de Exames DETRAN & Retestes</h5>
-              <small class="text-muted">Acompanhamento de aprovações, reprovações, taxas e prazos regulamentares</small>
+            <div class="card-header bg-white py-3 border-0 d-flex flex-wrap justify-content-between align-items-center gap-2">
+              <div>
+                <h5 class="mb-0 fw-bold">Gestão de Exames DETRAN & Retestes</h5>
+                <small class="text-muted">Acompanhamento de aprovações, reprovações, taxas e prazos regulamentares</small>
+              </div>
+              <div class="d-flex align-items-center gap-2">
+                <select class="form-select form-select-sm" id="filtro-tipo-exame" style="width: auto;">
+                  <option value="">Todos os Tipos</option>
+                  <option value="TEORICO">Exame Teórico</option>
+                  <option value="PRATICO">Exame Prático</option>
+                </select>
+                <select class="form-select form-select-sm" id="filtro-status-exame" style="width: auto;">
+                  <option value="">Todos os Resultados</option>
+                  <option value="AGENDADO">Agendado</option>
+                  <option value="APROVADO">Aprovado</option>
+                  <option value="REPROVADO">Reprovado</option>
+                  <option value="AUSENTE">Ausente</option>
+                </select>
+                <button class="btn btn-sm btn-primary d-flex align-items-center gap-1" data-bs-toggle="modal" data-bs-target="#modalAgendarExame">
+                  <i class="bi bi-calendar-plus-fill"></i> Agendar Exame DETRAN
+                </button>
+              </div>
             </div>
             <div class="table-responsive p-3">
               <table class="table table-hover align-middle mb-0" id="tabela-exames">
@@ -399,6 +425,7 @@
                     <th>Horário / Local</th>
                     <th>Status Resultado</th>
                     <th>Reteste / Taxa</th>
+                    <th>Ações</th>
                   </tr>
                 </thead>
                 <tbody></tbody>
@@ -886,6 +913,154 @@
             <button type="submit" class="btn btn-primary btn-sm">Salvar Alteração</button>
           </div>
         </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: Agendar Exame DETRAN (Teórico em Turma ou Prático Individual) -->
+  <div class="modal fade" id="modalAgendarExame" tabindex="-1" aria-labelledby="modalAgendarExameLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title fw-bold" id="modalAgendarExameLabel">
+            <i class="bi bi-patch-check-fill me-2 text-primary"></i>Agendar Exame Oficial DETRAN
+          </h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+        </div>
+        <form id="formAgendarExame">
+          <div class="modal-body">
+            <div class="row g-3">
+              <div class="col-md-6">
+                <label for="selectExameTipo" class="form-label">Tipo de Exame *</label>
+                <select class="form-select" id="selectExameTipo" required>
+                  <option value="TEORICO" selected>Exame Teórico-Técnico (Em Turma)</option>
+                  <option value="PRATICO">Exame Prático de Direção (Individual)</option>
+                </select>
+              </div>
+              <div class="col-md-6">
+                <label for="selectExameAluno" class="form-label">Aluno Candidato *</label>
+                <select class="form-select" id="selectExameAluno" required></select>
+                <small class="text-muted" id="avisoAlunoExame">Filtrando apenas alunos aptos pelas diretrizes do DETRAN.</small>
+              </div>
+              <div class="col-md-4">
+                <label for="selectExameCategoria" class="form-label">Categoria *</label>
+                <select class="form-select" id="selectExameCategoria" required>
+                  <option value="B" selected>Cat B (Carro)</option>
+                  <option value="A">Cat A (Moto)</option>
+                  <option value="AB">Cat AB (Carro e Moto)</option>
+                  <option value="C">Cat C (Caminhão)</option>
+                  <option value="D">Cat D (Ônibus/Micro)</option>
+                  <option value="E">Cat E (Carreta)</option>
+                </select>
+              </div>
+              <div class="col-md-4">
+                <label for="inputExameData" class="form-label">Data do Exame *</label>
+                <input type="date" class="form-control" id="inputExameData" required>
+              </div>
+              <div class="col-md-4">
+                <label for="inputExameHorario" class="form-label">Horário *</label>
+                <input type="time" class="form-control" id="inputExameHorario" value="09:00" required>
+              </div>
+              <div class="col-md-6" id="grupoExameVeiculo">
+                <label for="selectExameVeiculo" class="form-label">Veículo Oficial da Autoescola (Exame Prático) *</label>
+                <select class="form-select" id="selectExameVeiculo"></select>
+              </div>
+              <div class="col-md-6" id="grupoExameTurmaCodigo">
+                <label for="inputExameTurmaCodigo" class="form-label">Código da Turma no DETRAN (Exame Teórico)</label>
+                <input type="text" class="form-control" id="inputExameTurmaCodigo" placeholder="DETRAN-TEO-SP-99">
+              </div>
+              <div class="col-md-12">
+                <label for="inputExameLocal" class="form-label">Local Oficial de Aplicação *</label>
+                <input type="text" class="form-control" id="inputExameLocal" value="Poupatempo / Pátio DETRAN Central" required>
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+            <button type="submit" class="btn btn-primary">
+              <i class="bi bi-calendar-check me-1"></i> Confirmar Agendamento de Exame
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: Lançar Resultado do Exame (Aprovação / Reprovação / Reteste) -->
+  <div class="modal fade" id="modalLancarResultadoExame" tabindex="-1" aria-labelledby="modalLancarResultadoExameLabel" aria-hidden="true">
+    <div class="modal-dialog modal-md">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title fw-bold" id="modalLancarResultadoExameLabel">
+            <i class="bi bi-clipboard2-check me-2 text-primary"></i>Resultado Oficial DETRAN
+          </h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+        </div>
+        <form id="formLancarResultadoExame">
+          <input type="hidden" id="resultadoExameId">
+          <div class="modal-body">
+            <div class="card p-3 mb-3 bg-light border-0">
+              <div class="fw-bold" id="resultadoExameAlunoInfo">Aluno - Exame</div>
+              <small class="text-muted" id="resultadoExameDataInfo">Data / Horário</small>
+            </div>
+
+            <div class="mb-3">
+              <label for="selectResultadoStatus" class="form-label fw-bold">Resultado Oficial *</label>
+              <select class="form-select" id="selectResultadoStatus" required>
+                <option value="APROVADO">APROVADO (Avançar no processo / Habilitado)</option>
+                <option value="REPROVADO">REPROVADO (Gera taxa de reteste pendente)</option>
+                <option value="AUSENTE">AUSENTE (Não compareceu ao exame)</option>
+              </select>
+            </div>
+
+            <div class="mb-3 d-none" id="grupoPontuacaoTeorica">
+              <label for="inputPontuacaoTeorica" class="form-label">Pontuação Obtida (Mínimo 21 de 30 pontos para aprovação) *</label>
+              <input type="number" class="form-control" id="inputPontuacaoTeorica" min="0" max="30" value="21">
+            </div>
+
+            <div class="mb-3 d-none" id="grupoMotivoReprovacao">
+              <label for="inputMotivoReprovacao" class="form-label">Motivo da Reprovação / Faltas Cometidas</label>
+              <textarea class="form-control" id="inputMotivoReprovacao" rows="2" placeholder="Ex: Falta eliminatória na baliza ou insuficiência de pontos"></textarea>
+              <div class="form-text text-danger">A reprovação gera taxa regulamentar de reteste no valor de R$ 120,00.</div>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+            <button type="submit" class="btn btn-primary">
+              <i class="bi bi-save me-1"></i> Gravar Resultado
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: Resumo de Notificações Disparadas (24h de Antecedência) -->
+  <div class="modal fade" id="modalNotificacoesDisparadas" tabindex="-1" aria-labelledby="modalNotificacoesDisparadasLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title fw-bold" id="modalNotificacoesDisparadasLabel">
+            <i class="bi bi-whatsapp me-2 text-success"></i>Disparo Automático de Lembretes (24h de Antecedência)
+          </h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+        </div>
+        <div class="modal-body">
+          <div class="alert alert-success d-flex align-items-center mb-3">
+            <i class="bi bi-check-circle-fill fs-3 me-3"></i>
+            <div>
+              <strong id="notifTotalEnviadas">0 notificações disparadas</strong> com sucesso para eventos agendados para amanhã.
+              <div class="small text-muted">Canais: WhatsApp (Evolution API) e E-mail.</div>
+            </div>
+          </div>
+          <h6 class="fw-bold small text-secondary">Fila e Registro de Envio:</h6>
+          <div class="border rounded p-2 bg-light" style="max-height: 250px; overflow-y: auto;">
+            <ul class="list-group list-group-flush small" id="listaNotificacoesDisparadas"></ul>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Fechar</button>
+        </div>
       </div>
     </div>
   </div>

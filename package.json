@@ -6,8 +6,9 @@
   "scripts": {
     "build": "tsc",
     "watch": "tsc -w",
-    "start": "electron .",
+    "start": "tsc && electron .",
     "dev": "tsc && electron .",
+    "setup-db": "node scripts/setup-db.js",
     "package:win": "electron-builder --win",
     "package:mac": "electron-builder --mac"
   },

@@ -18,11 +18,11 @@ try {
 function carregarEnv() {
   const envPath = path.join(__dirname, '../.env');
   const config = {
-    host: '143.106.241.4',
-    user: 'cl205461',
-    password: 'cl*13052010',
-    database: 'cl205461',
-    port: 3306
+    host: process.env.DB_HOST || '127.0.0.1',
+    user: process.env.DB_USER || 'root',
+    password: process.env.DB_PASSWORD || '',
+    database: process.env.DB_NAME || 'autoescola',
+    port: Number(process.env.DB_PORT) || 3306
   };
 
   if (fs.existsSync(envPath)) {
@@ -66,10 +66,24 @@ async function executarMigracao() {
     const [tabelasAntes] = await conn.query("SHOW TABLES LIKE 'ae_%'");
     console.log(`[Migração] Tabelas ae_* encontradas previamente: ${tabelasAntes.length}`);
 
-    // 1. Executar Schema (DDL)
+    // 1. Executar Schema (DDL e Triggers)
     console.log('[Migração] Executando database/schema.sql...');
     const schemaSql = fs.readFileSync(path.join(__dirname, '../database/schema.sql'), 'utf-8');
-    await conn.query(schemaSql);
+    if (schemaSql.includes('DELIMITER')) {
+      const dropTriggerIdx = schemaSql.indexOf('DROP TRIGGER IF EXISTS trg_ae_valida_capacidade_turma');
+      const ddlPart = schemaSql.substring(0, dropTriggerIdx).trim();
+      await conn.query(ddlPart);
+
+      await conn.query('DROP TRIGGER IF EXISTS trg_ae_valida_capacidade_turma');
+      const triggerIdx = schemaSql.indexOf('CREATE TRIGGER trg_ae_valida_capacidade_turma');
+      const triggerBody = schemaSql.substring(triggerIdx)
+        .replace(/END\/\/\s*DELIMITER\s*;/gi, 'END')
+        .replace(/DELIMITER\s*;/gi, '')
+        .trim();
+      await conn.query(triggerBody);
+    } else {
+      await conn.query(schemaSql);
+    }
     console.log('[Migração] Schema (tabelas ae_* e triggers) aplicado com sucesso.');
 
     // 2. Executar Seeds (DML inicial)
@@ -78,15 +92,21 @@ async function executarMigracao() {
     await conn.query(seedsSql);
     console.log('[Migração] Carga inicial (seeds) inserida com sucesso.');
 
-    // 3. Confirmar integridade
+    // 3. Confirmar integridade e contagem de registros
     const [tabelasDepois] = await conn.query("SHOW TABLES LIKE 'ae_%'");
-    console.log('\n=== TABELAS DO PROJETO AUTOESCOLA CRIADAS COM SUCESSO ===');
-    tabelasDepois.forEach(row => {
-      console.log(' - ' + Object.values(row)[0]);
-    });
+    console.log('\n=== STATUS DAS TABELAS DO BANCO MYSQL (AUTOESCOLA PRO) ===');
+    for (const row of tabelasDepois) {
+      const nomeTabela = Object.values(row)[0];
+      try {
+        const [[{ total }]] = await conn.query(`SELECT COUNT(*) as total FROM \`${nomeTabela}\``);
+        console.log(` - ${nomeTabela.padEnd(25)} : ${total} registro(s)`);
+      } catch (e) {
+        console.log(` - ${nomeTabela.padEnd(25)} : Ativa`);
+      }
+    }
 
     await conn.end();
-    console.log('\n[Migração Concluída] Banco pronto para operação!\n');
+    console.log('\n[Migração Concluída] Banco MySQL inicializado e populado com sucesso!\n');
   } catch (err) {
     console.error('[ERRO na Migração]:', err.message);
   }

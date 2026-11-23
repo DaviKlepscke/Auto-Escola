@@ -19,11 +19,11 @@ export interface DBConfig {
 function carregarEnvLocal(): DBConfig {
   const envPath = path.join(process.cwd(), '.env');
   const config: DBConfig = {
-    host: '143.106.241.4',
-    user: 'cl205461',
-    password: 'cl*13052010',
-    database: 'cl205461',
-    port: 3306
+    host: process.env.DB_HOST || '127.0.0.1',
+    user: process.env.DB_USER || 'root',
+    password: process.env.DB_PASSWORD || '',
+    database: process.env.DB_NAME || 'autoescola',
+    port: Number(process.env.DB_PORT) || 3306
   };
 
   if (fs.existsSync(envPath)) {

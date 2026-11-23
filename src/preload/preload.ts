@@ -4,12 +4,17 @@
 // =====================================================================
 
 import { contextBridge, ipcRenderer } from 'electron';
-import { Aluno, Instrutor, Veiculo, TurmaTeorica, AulaPratica, IElectronAPI } from '../common/types';
+import { Aluno, Instrutor, Veiculo, TurmaTeorica, AulaPratica, Exame, IElectronAPI } from '../common/types';
 
 const api: IElectronAPI = {
   getAppVersion: () => ipcRenderer.invoke('app:version'),
   getDashboardStats: () => ipcRenderer.invoke('dashboard:stats'),
   testarConexaoBD: () => ipcRenderer.invoke('database:test'),
+
+  // Autenticação & Segurança (Restrito ao Dono e Atendimento)
+  login: (login, senha) => ipcRenderer.invoke('auth:login', { login, senha }),
+  obterUsuarioAtual: () => ipcRenderer.invoke('auth:current-user'),
+  logout: () => ipcRenderer.invoke('auth:logout'),
 
   // Alunos
   listarAlunos: (filtro) => ipcRenderer.invoke('alunos:listar', filtro),
@@ -45,8 +50,16 @@ const api: IElectronAPI = {
   atualizarStatusAulaPratica: (aulaId: number, status: 'REALIZADA' | 'FALTOU' | 'CANCELADA') =>
     ipcRenderer.invoke('aulas:atualizar-status-pratica', aulaId, status),
 
-  // Exames
-  listarExames: () => ipcRenderer.invoke('exames:listar')
+  // Exames (Sprint 3: Gestão de Exames, Resultados e Retestes)
+  listarExames: (filtro) => ipcRenderer.invoke('exames:listar', filtro),
+  agendarExame: (exame: Exame) => ipcRenderer.invoke('exames:agendar', exame),
+  lancarResultadoExame: (exameId, dados) => ipcRenderer.invoke('exames:lancar-resultado', exameId, dados),
+  quitarTaxaReteste: (exameId) => ipcRenderer.invoke('exames:quitar-taxa-reteste', exameId),
+  obterAlunosAptosExame: (tipo) => ipcRenderer.invoke('exames:obter-aptos', tipo),
+
+  // Integrações: Notificações 24h & Previsão do Tempo
+  dispararNotificacoes24h: () => ipcRenderer.invoke('notificacoes:disparar-24h'),
+  consultarClima: (cidade, data, categoria) => ipcRenderer.invoke('clima:consultar', cidade, data, categoria)
 };
 
 contextBridge.exposeInMainWorld('electronAPI', api);
