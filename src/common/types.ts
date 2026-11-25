@@ -44,6 +44,9 @@ export interface Aluno {
   status_exame_psico: 'PENDENTE' | 'APTO' | 'INAPTO';
   ladv_numero?: string;
   status_processo: StatusProcessoAluno;
+  horas_teoricas_cumpridas?: number;
+  horas_praticas_cumpridas?: number;
+  horas_noturnas_cumpridas?: number;
   criado_em?: string;
 }
 
@@ -177,18 +180,23 @@ export interface IElectronAPI {
   // Alunos
   listarAlunos: (filtro?: { categoria?: string; status?: string }) => Promise<Aluno[]>;
   salvarAluno: (aluno: Aluno) => Promise<{ success: boolean; id?: number; error?: string }>;
+  atualizarAluno: (aluno: Aluno) => Promise<{ success: boolean; error?: string }>;
+  deletarAluno: (id: number) => Promise<{ success: boolean; error?: string }>;
   importarAlunosCSV: (alunos: Aluno[]) => Promise<BatchImportResult>;
   obterCargaHoraria: (alunoId: number) => Promise<CargaHorariaAluno>;
 
   // Instrutores
   listarInstrutores: () => Promise<Instrutor[]>;
   salvarInstrutor: (instrutor: Instrutor) => Promise<{ success: boolean; id?: number; error?: string }>;
+  atualizarInstrutor: (instrutor: Instrutor) => Promise<{ success: boolean; error?: string }>;
+  deletarInstrutor: (id: number) => Promise<{ success: boolean; error?: string }>;
   importarInstrutoresCSV: (instrutores: Instrutor[]) => Promise<BatchImportResult>;
 
   // Frota / Veículos
   listarVeiculos: () => Promise<Veiculo[]>;
   salvarVeiculo: (veiculo: Veiculo) => Promise<{ success: boolean; id?: number; error?: string }>;
   atualizarKmVeiculo: (id: number, novoKm: number, registrarRevisao?: boolean) => Promise<{ success: boolean; error?: string }>;
+  deletarVeiculo: (id: number) => Promise<{ success: boolean; error?: string }>;
   importarVeiculosCSV: (veiculos: Veiculo[]) => Promise<BatchImportResult>;
 
   // Turmas e Salas (Limite de 20 alunos)

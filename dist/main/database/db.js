@@ -104,6 +104,7 @@ class DatabaseManager {
             const connection = await this.pool.getConnection();
             connection.release();
             this.isConnected = true;
+            await this.garantirColunasAlunos();
             console.log(`[DB] Conexão ativa com o MySQL [${config.database}@${config.host}].`);
             return true;
         }
@@ -121,6 +122,33 @@ class DatabaseManager {
     }
     getConfig() {
         return this.currentConfig;
+    }
+    /**
+     * Garante colunas de carga horária em bancos já existentes sem quebrar instalações antigas.
+     */
+    async garantirColunasAlunos() {
+        if (!this.pool)
+            return;
+        const colunas = [
+            'horas_teoricas_cumpridas',
+            'horas_praticas_cumpridas',
+            'horas_noturnas_cumpridas'
+        ];
+        try {
+            const [rows] = await this.pool.query(`SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+         WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'ae_alunos'`, [this.currentConfig.database]);
+            if (!Array.isArray(rows) || rows.length === 0)
+                return;
+            const existentes = new Set(rows.map((r) => String(r.COLUMN_NAME)));
+            for (const col of colunas) {
+                if (!existentes.has(col)) {
+                    await this.pool.execute(`ALTER TABLE ae_alunos ADD COLUMN ${col} INT NOT NULL DEFAULT 0`);
+                }
+            }
+        }
+        catch (err) {
+            console.warn('[DB] Aviso ao verificar colunas de carga horária em ae_alunos:', err.message);
+        }
     }
 }
 exports.db = new DatabaseManager();

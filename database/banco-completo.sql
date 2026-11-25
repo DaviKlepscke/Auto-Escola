@@ -50,6 +50,9 @@ CREATE TABLE IF NOT EXISTS ae_alunos (
         'HABILITADO',
         'BLOQUEADO'
     ) NOT NULL DEFAULT 'PRE_CADASTRO',
+    horas_teoricas_cumpridas INT NOT NULL DEFAULT 0,
+    horas_praticas_cumpridas INT NOT NULL DEFAULT 0,
+    horas_noturnas_cumpridas INT NOT NULL DEFAULT 0,
     criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     atualizado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_ae_aluno_cpf (cpf),

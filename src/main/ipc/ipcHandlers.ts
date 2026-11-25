@@ -40,7 +40,10 @@ let mockAlunos: Aluno[] = [
     status_exame_medico: 'APTO',
     status_exame_psico: 'APTO',
     ladv_numero: 'LADV-2026-091',
-    status_processo: 'CURSO_PRATICO'
+    status_processo: 'CURSO_PRATICO',
+    horas_teoricas_cumpridas: 45,
+    horas_praticas_cumpridas: 20,
+    horas_noturnas_cumpridas: 2
   },
   {
     id: 2,
@@ -54,7 +57,10 @@ let mockAlunos: Aluno[] = [
     categoria_pretendida: 'A',
     status_exame_medico: 'APTO',
     status_exame_psico: 'APTO',
-    status_processo: 'CURSO_TEORICO'
+    status_processo: 'CURSO_TEORICO',
+    horas_teoricas_cumpridas: 32,
+    horas_praticas_cumpridas: 0,
+    horas_noturnas_cumpridas: 0
   }
 ];
 
@@ -228,22 +234,141 @@ export function registerIpcHandlers() {
   });
 
   ipcMain.handle('alunos:salvar', async (_, aluno: Aluno) => {
+    const hTeo = Math.max(0, Math.trunc(Number(aluno.horas_teoricas_cumpridas) || 0));
+    const hPrat = Math.max(0, Math.trunc(Number(aluno.horas_praticas_cumpridas) || 0));
+    const hNot = Math.max(0, Math.trunc(Number(aluno.horas_noturnas_cumpridas) || 0));
+
     if (db.hasConnection()) {
       try {
         const [result]: any = await db.getPool()!.execute(
-          `INSERT INTO ae_alunos (nome, cpf, rg, renach, data_nascimento, telefone, email, categoria_pretendida, status_processo)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `INSERT INTO ae_alunos (nome, cpf, rg, renach, data_nascimento, telefone, email, categoria_pretendida, status_processo, horas_teoricas_cumpridas, horas_praticas_cumpridas, horas_noturnas_cumpridas)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
            ON DUPLICATE KEY UPDATE nome = VALUES(nome), telefone = VALUES(telefone), email = VALUES(email), status_processo = VALUES(status_processo)`,
-          [aluno.nome, aluno.cpf, aluno.rg, aluno.renach || null, aluno.data_nascimento, aluno.telefone, aluno.email, aluno.categoria_pretendida, aluno.status_processo || 'PRE_CADASTRO']
+          [aluno.nome, aluno.cpf, aluno.rg, aluno.renach || null, aluno.data_nascimento, aluno.telefone, aluno.email, aluno.categoria_pretendida, aluno.status_processo || 'PRE_CADASTRO', hTeo, hPrat, hNot]
         );
         return { success: true, id: result.insertId };
       } catch (err: any) {
         return { success: false, error: err.message };
       }
     }
-    const newId = mockAlunos.length + 1;
-    mockAlunos.unshift({ ...aluno, id: newId });
+    const newId = Math.max(0, ...mockAlunos.map(a => a.id || 0)) + 1;
+    mockAlunos.unshift({
+      ...aluno,
+      id: newId,
+      horas_teoricas_cumpridas: hTeo,
+      horas_praticas_cumpridas: hPrat,
+      horas_noturnas_cumpridas: hNot
+    });
     return { success: true, id: newId };
+  });
+
+  ipcMain.handle('alunos:atualizar', async (_, aluno: Aluno) => {
+    if (!aluno.id) return { success: false, error: 'ID do aluno não informado.' };
+
+    const hTeo = Math.max(0, Math.trunc(Number(aluno.horas_teoricas_cumpridas) || 0));
+    const hPrat = Math.max(0, Math.trunc(Number(aluno.horas_praticas_cumpridas) || 0));
+    const hNot = Math.max(0, Math.trunc(Number(aluno.horas_noturnas_cumpridas) || 0));
+
+    if (db.hasConnection()) {
+      try {
+        const [result]: any = await db.getPool()!.execute(
+          `UPDATE ae_alunos
+           SET nome = ?, cpf = ?, rg = ?, renach = ?, data_nascimento = ?, telefone = ?, email = ?,
+               categoria_pretendida = ?, status_exame_medico = ?, status_exame_psico = ?,
+               ladv_numero = ?, status_processo = ?,
+               horas_teoricas_cumpridas = ?, horas_praticas_cumpridas = ?, horas_noturnas_cumpridas = ?
+           WHERE id = ?`,
+          [
+            aluno.nome,
+            aluno.cpf,
+            aluno.rg,
+            aluno.renach || null,
+            aluno.data_nascimento,
+            aluno.telefone,
+            aluno.email,
+            aluno.categoria_pretendida,
+            aluno.status_exame_medico || 'PENDENTE',
+            aluno.status_exame_psico || 'PENDENTE',
+            aluno.ladv_numero || null,
+            aluno.status_processo || 'PRE_CADASTRO',
+            hTeo,
+            hPrat,
+            hNot,
+            aluno.id
+          ]
+        );
+        if (result.affectedRows === 0) return { success: false, error: 'Aluno não encontrado.' };
+        return { success: true };
+      } catch (err: any) {
+        return { success: false, error: err.message };
+      }
+    }
+
+    const idx = mockAlunos.findIndex(a => a.id === aluno.id);
+    if (idx === -1) return { success: false, error: 'Aluno não encontrado.' };
+
+    mockAlunos[idx] = {
+      ...mockAlunos[idx],
+      ...aluno,
+      horas_teoricas_cumpridas: hTeo,
+      horas_praticas_cumpridas: hPrat,
+      horas_noturnas_cumpridas: hNot
+    };
+    mockMatriculas.forEach(m => {
+      if (m.aluno_id === aluno.id) {
+        m.aluno_nome = aluno.nome;
+        m.aluno_cpf = aluno.cpf;
+      }
+    });
+    mockAulasPraticas.forEach(a => {
+      if (a.aluno_id === aluno.id) a.aluno_nome = aluno.nome;
+    });
+    mockExames.forEach(e => {
+      if (e.aluno_id === aluno.id) e.aluno_nome = aluno.nome;
+    });
+    return { success: true };
+  });
+
+  ipcMain.handle('alunos:deletar', async (_, id: number) => {
+    if (!id) return { success: false, error: 'ID do aluno inválido.' };
+
+    if (db.hasConnection()) {
+      const conn = await db.getPool()!.getConnection();
+      try {
+        await conn.beginTransaction();
+        await conn.execute('DELETE FROM ae_notificacoes_fila WHERE aluno_id = ?', [id]);
+        await conn.execute('DELETE FROM ae_frequencia_teorica WHERE aluno_id = ?', [id]);
+        await conn.execute('DELETE FROM ae_matriculas_turma WHERE aluno_id = ?', [id]);
+        await conn.execute('DELETE FROM ae_aulas_praticas WHERE aluno_id = ?', [id]);
+        await conn.execute(
+          'UPDATE ae_exames SET exame_anterior_reprovado_id = NULL WHERE exame_anterior_reprovado_id IN (SELECT id FROM (SELECT id FROM ae_exames WHERE aluno_id = ?) AS tmp)',
+          [id]
+        );
+        await conn.execute('DELETE FROM ae_exames WHERE aluno_id = ?', [id]);
+        const [result]: any = await conn.execute('DELETE FROM ae_alunos WHERE id = ?', [id]);
+        await conn.commit();
+
+        if (result.affectedRows === 0) return { success: false, error: 'Aluno não encontrado.' };
+        return { success: true };
+      } catch (err: any) {
+        await conn.rollback();
+        return { success: false, error: err.message };
+      } finally {
+        conn.release();
+      }
+    }
+
+    const idx = mockAlunos.findIndex(a => a.id === id);
+    if (idx === -1) return { success: false, error: 'Aluno não encontrado.' };
+
+    mockAlunos.splice(idx, 1);
+    mockMatriculas = mockMatriculas.filter(m => m.aluno_id !== id);
+    mockAulasPraticas = mockAulasPraticas.filter(a => a.aluno_id !== id);
+    mockExames = mockExames.filter(e => e.aluno_id !== id);
+    mockTurmas.forEach(t => {
+      t.total_alunos = mockMatriculas.filter(m => m.turma_id === t.id && m.status === 'MATRICULADO').length;
+    });
+    return { success: true };
   });
 
   ipcMain.handle('alunos:importar-csv', async (_, lista: Aluno[]): Promise<BatchImportResult> => {
@@ -286,17 +411,42 @@ export function registerIpcHandlers() {
   });
 
   ipcMain.handle('alunos:obter-carga-horaria', async (_, alunoId: number): Promise<CargaHorariaAluno> => {
-    const aluno = mockAlunos.find(a => a.id === alunoId) || { nome: 'Aluno CFC', categoria_pretendida: 'B' };
-    const aulasPratAluno = mockAulasPraticas.filter(a => a.aluno_id === alunoId && a.status === 'REALIZADA');
-    const horasPrat = aulasPratAluno.length;
-    const horasNoturnas = aulasPratAluno.filter(a => a.eh_noturna).length;
+    if (db.hasConnection()) {
+      try {
+        const [[aluno]]: any = await db.getPool()!.query(
+          'SELECT nome, categoria_pretendida, horas_teoricas_cumpridas, horas_praticas_cumpridas, horas_noturnas_cumpridas FROM ae_alunos WHERE id = ?',
+          [alunoId]
+        );
+        if (aluno) {
+          const horasTeoricas = Number(aluno.horas_teoricas_cumpridas ?? 0);
+          const horasPrat = Number(aluno.horas_praticas_cumpridas ?? 0);
+          const horasNoturnas = Number(aluno.horas_noturnas_cumpridas ?? 0);
+          return {
+            alunoId,
+            alunoNome: aluno.nome,
+            categoria: aluno.categoria_pretendida || 'B',
+            horasTeoricasCumpridas: horasTeoricas,
+            horasTeoricasExigidas: 45,
+            horasPraticasCumpridas: horasPrat,
+            horasNoturnasCumpridas: horasNoturnas,
+            prontoParaExameTeorico: horasTeoricas >= 45,
+            prontoParaExamePratico: horasPrat >= 20 && horasNoturnas >= 1
+          };
+        }
+      } catch (err: any) {
+        console.warn('Erro ao consultar carga horária no MySQL:', err.message);
+      }
+    }
 
-    // Regras DETRAN
-    const horasTeoricas = (alunoId === 1) ? 45 : 32;
+    const aluno = mockAlunos.find(a => a.id === alunoId);
+    const horasTeoricas = Number(aluno?.horas_teoricas_cumpridas ?? 0);
+    const horasPrat = Number(aluno?.horas_praticas_cumpridas ?? 0);
+    const horasNoturnas = Number(aluno?.horas_noturnas_cumpridas ?? 0);
+
     return {
       alunoId,
-      alunoNome: aluno.nome,
-      categoria: (aluno.categoria_pretendida as any) || 'B',
+      alunoNome: aluno?.nome || 'Aluno CFC',
+      categoria: (aluno?.categoria_pretendida as any) || 'B',
       horasTeoricasCumpridas: horasTeoricas,
       horasTeoricasExigidas: 45,
       horasPraticasCumpridas: horasPrat,
@@ -333,9 +483,98 @@ export function registerIpcHandlers() {
         return { success: false, error: err.message };
       }
     }
-    const newId = mockInstrutores.length + 1;
+    const newId = Math.max(0, ...mockInstrutores.map(i => i.id || 0)) + 1;
     mockInstrutores.push({ ...inst, id: newId });
     return { success: true, id: newId };
+  });
+
+  ipcMain.handle('instrutores:atualizar', async (_, inst: Instrutor) => {
+    if (!inst.id) return { success: false, error: 'ID do instrutor não informado.' };
+
+    if (db.hasConnection()) {
+      try {
+        const [result]: any = await db.getPool()!.execute(
+          `UPDATE ae_instrutores
+           SET nome = ?, cpf = ?, credencial_detran = ?, telefone = ?, email = ?,
+               tipo = ?, habilita_veiculos_pesados = ?, ativo = ?
+           WHERE id = ?`,
+          [
+            inst.nome,
+            inst.cpf,
+            inst.credencial_detran,
+            inst.telefone,
+            inst.email || null,
+            inst.tipo,
+            inst.habilita_veiculos_pesados ? 1 : 0,
+            inst.ativo !== false ? 1 : 0,
+            inst.id
+          ]
+        );
+        if (result.affectedRows === 0) return { success: false, error: 'Instrutor não encontrado.' };
+        return { success: true };
+      } catch (err: any) {
+        return { success: false, error: err.message };
+      }
+    }
+
+    const idx = mockInstrutores.findIndex(i => i.id === inst.id);
+    if (idx === -1) return { success: false, error: 'Instrutor não encontrado.' };
+
+    mockInstrutores[idx] = { ...mockInstrutores[idx], ...inst };
+    mockTurmas.forEach(t => {
+      if (t.instrutor_id === inst.id) t.instrutor_nome = inst.nome;
+    });
+    mockAulasPraticas.forEach(a => {
+      if (a.instrutor_id === inst.id) a.instrutor_nome = inst.nome;
+    });
+    return { success: true };
+  });
+
+  ipcMain.handle('instrutores:deletar', async (_, id: number) => {
+    if (!id) return { success: false, error: 'ID do instrutor inválido.' };
+
+    if (db.hasConnection()) {
+      const conn = await db.getPool()!.getConnection();
+      try {
+        const [[{ totalTurmas }]]: any = await conn.query(
+          'SELECT COUNT(*) as totalTurmas FROM ae_turmas_teoricas WHERE instrutor_id = ?',
+          [id]
+        );
+        if (Number(totalTurmas) > 0) {
+          return {
+            success: false,
+            error: 'Não é possível excluir o instrutor porque existem turmas teóricas vinculadas a ele.'
+          };
+        }
+
+        await conn.beginTransaction();
+        await conn.execute('DELETE FROM ae_aulas_praticas WHERE instrutor_id = ?', [id]);
+        const [result]: any = await conn.execute('DELETE FROM ae_instrutores WHERE id = ?', [id]);
+        await conn.commit();
+
+        if (result.affectedRows === 0) return { success: false, error: 'Instrutor não encontrado.' };
+        return { success: true };
+      } catch (err: any) {
+        await conn.rollback();
+        return { success: false, error: err.message };
+      } finally {
+        conn.release();
+      }
+    }
+
+    if (mockTurmas.some(t => t.instrutor_id === id)) {
+      return {
+        success: false,
+        error: 'Não é possível excluir o instrutor porque existem turmas teóricas vinculadas a ele.'
+      };
+    }
+
+    const idx = mockInstrutores.findIndex(i => i.id === id);
+    if (idx === -1) return { success: false, error: 'Instrutor não encontrado.' };
+
+    mockInstrutores.splice(idx, 1);
+    mockAulasPraticas = mockAulasPraticas.filter(a => a.instrutor_id !== id);
+    return { success: true };
   });
 
   ipcMain.handle('instrutores:importar-csv', async (_, lista: Instrutor[]): Promise<BatchImportResult> => {
@@ -405,7 +644,7 @@ export function registerIpcHandlers() {
         return { success: false, error: err.message };
       }
     }
-    const newId = mockVeiculos.length + 1;
+    const newId = Math.max(0, ...mockVeiculos.map(item => item.id || 0)) + 1;
     mockVeiculos.push({ ...v, id: newId, status: statusCalculado });
     return { success: true, id: newId };
   });
@@ -456,6 +695,40 @@ export function registerIpcHandlers() {
       return { success: true };
     }
     return { success: false, error: 'Veículo não encontrado.' };
+  });
+
+  ipcMain.handle('veiculos:deletar', async (_, id: number) => {
+    if (!id) return { success: false, error: 'ID do veículo inválido.' };
+
+    if (db.hasConnection()) {
+      const conn = await db.getPool()!.getConnection();
+      try {
+        await conn.beginTransaction();
+        await conn.execute('UPDATE ae_exames SET veiculo_id = NULL WHERE veiculo_id = ?', [id]);
+        await conn.execute('DELETE FROM ae_aulas_praticas WHERE veiculo_id = ?', [id]);
+        await conn.execute('DELETE FROM ae_manutencoes_veiculo WHERE veiculo_id = ?', [id]);
+        const [result]: any = await conn.execute('DELETE FROM ae_veiculos WHERE id = ?', [id]);
+        await conn.commit();
+
+        if (result.affectedRows === 0) return { success: false, error: 'Veículo não encontrado.' };
+        return { success: true };
+      } catch (err: any) {
+        await conn.rollback();
+        return { success: false, error: err.message };
+      } finally {
+        conn.release();
+      }
+    }
+
+    const idx = mockVeiculos.findIndex(v => v.id === id);
+    if (idx === -1) return { success: false, error: 'Veículo não encontrado.' };
+
+    mockVeiculos.splice(idx, 1);
+    mockExames.forEach(e => {
+      if (e.veiculo_id === id) e.veiculo_id = undefined;
+    });
+    mockAulasPraticas = mockAulasPraticas.filter(a => a.veiculo_id !== id);
+    return { success: true };
   });
 
   ipcMain.handle('veiculos:importar-csv', async (_, lista: Veiculo[]): Promise<BatchImportResult> => {
@@ -826,9 +1099,9 @@ export function registerIpcHandlers() {
         const pool = db.getPool()!;
         await pool.execute('UPDATE ae_aulas_praticas SET status = ? WHERE id = ?', [status, aulaId]);
 
-        // Se a aula foi REALIZADA, acrescenta 15 km no odômetro do veículo e reavalia revisão
+        // Se a aula foi REALIZADA, acrescenta 15 km no odômetro do veículo e atualiza carga horária do aluno
         if (status === 'REALIZADA') {
-          const [[aula]]: any = await pool.query('SELECT veiculo_id FROM ae_aulas_praticas WHERE id = ?', [aulaId]);
+          const [[aula]]: any = await pool.query('SELECT aluno_id, veiculo_id, eh_noturna FROM ae_aulas_praticas WHERE id = ?', [aulaId]);
           if (aula?.veiculo_id) {
             await pool.execute(`
               UPDATE ae_veiculos
@@ -836,6 +1109,14 @@ export function registerIpcHandlers() {
                   status = IF((km_atual + 15) >= (km_ultima_revisao + intervalo_revisao_km - 1000), 'ALERTA_REVISAO', status)
               WHERE id = ?
             `, [aula.veiculo_id]);
+          }
+          if (aula?.aluno_id) {
+            await pool.execute(`
+              UPDATE ae_alunos
+              SET horas_praticas_cumpridas = horas_praticas_cumpridas + 1,
+                  horas_noturnas_cumpridas = horas_noturnas_cumpridas + IF(?, 1, 0)
+              WHERE id = ?
+            `, [aula.eh_noturna ? 1 : 0, aula.aluno_id]);
           }
         }
         return { success: true };
@@ -853,6 +1134,13 @@ export function registerIpcHandlers() {
           v.km_atual += 15;
           if (v.km_atual >= (v.km_ultima_revisao + v.intervalo_revisao_km - 1000)) {
             v.status = 'ALERTA_REVISAO';
+          }
+        }
+        const al = mockAlunos.find(item => item.id === a.aluno_id);
+        if (al) {
+          al.horas_praticas_cumpridas = (al.horas_praticas_cumpridas || 0) + 1;
+          if (a.eh_noturna) {
+            al.horas_noturnas_cumpridas = (al.horas_noturnas_cumpridas || 0) + 1;
           }
         }
       }

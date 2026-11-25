@@ -279,6 +279,7 @@
                     <th>Veículos Pesados</th>
                     <th>Telefone</th>
                     <th>Status</th>
+                    <th>Ações</th>
                   </tr>
                 </thead>
                 <tbody></tbody>
@@ -772,6 +773,132 @@
     </div>
   </div>
 
+  <!-- MODAL: Edição de Aluno (Dados Cadastrais, Processo DETRAN e Cargas Horárias) -->
+  <div class="modal fade" id="modalEditarAluno" tabindex="-1" aria-labelledby="modalEditarAlunoLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title fw-bold" id="modalEditarAlunoLabel"><i class="bi bi-pencil-square me-2 text-primary"></i>Editar Aluno &amp; Cargas Horárias</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+        </div>
+        <form id="formEditarAluno" novalidate>
+          <input type="hidden" id="editAlunoId">
+          <div class="modal-body">
+            <h6 class="fw-bold text-secondary small mb-2">DADOS CADASTRAIS</h6>
+            <div class="row g-3 mb-3">
+              <div class="col-md-8">
+                <label for="editAlunoNome" class="form-label">Nome Completo *</label>
+                <input type="text" class="form-control" id="editAlunoNome" required minlength="3">
+              </div>
+              <div class="col-md-4">
+                <label for="editAlunoCategoria" class="form-label">Categoria Pretendida *</label>
+                <select class="form-select" id="editAlunoCategoria" required>
+                  <option value="A">Categoria A (Moto)</option>
+                  <option value="B">Categoria B (Carro)</option>
+                  <option value="AB">Categoria AB (Carro e Moto)</option>
+                  <option value="C">Categoria C (Caminhão)</option>
+                  <option value="D">Categoria D (Ônibus/Van)</option>
+                  <option value="E">Categoria E (Carreta/Articulado)</option>
+                </select>
+              </div>
+              <div class="col-md-4">
+                <label for="editAlunoCPF" class="form-label">CPF *</label>
+                <input type="text" class="form-control" id="editAlunoCPF" placeholder="000.000.000-00" required maxlength="14">
+                <div class="invalid-feedback" id="feedbackEditCPF">CPF inválido.</div>
+              </div>
+              <div class="col-md-4">
+                <label for="editAlunoRG" class="form-label">RG *</label>
+                <input type="text" class="form-control" id="editAlunoRG" required>
+              </div>
+              <div class="col-md-4">
+                <label for="editAlunoRenach" class="form-label">RENACH</label>
+                <input type="text" class="form-control" id="editAlunoRenach" placeholder="SP123456789">
+                <div class="invalid-feedback" id="feedbackEditRenach">Formato RENACH inválido.</div>
+              </div>
+              <div class="col-md-4">
+                <label for="editAlunoNascimento" class="form-label">Data de Nascimento *</label>
+                <input type="date" class="form-control" id="editAlunoNascimento" required>
+                <div class="invalid-feedback" id="feedbackEditNascimento">Idade mínima legal não atingida.</div>
+              </div>
+              <div class="col-md-4">
+                <label for="editAlunoTelefone" class="form-label">Telefone Celular *</label>
+                <input type="text" class="form-control" id="editAlunoTelefone" placeholder="(11) 98888-7777" required maxlength="15">
+                <div class="invalid-feedback" id="feedbackEditTelefone">Telefone celular inválido.</div>
+              </div>
+              <div class="col-md-4">
+                <label for="editAlunoEmail" class="form-label">E-mail *</label>
+                <input type="email" class="form-control" id="editAlunoEmail" required>
+                <div class="invalid-feedback" id="feedbackEditEmail">E-mail inválido.</div>
+              </div>
+            </div>
+
+            <hr>
+            <h6 class="fw-bold text-secondary small mb-2">PROCESSO DETRAN &amp; LADV</h6>
+            <div class="row g-3 mb-3">
+              <div class="col-md-4">
+                <label for="editAlunoStatusProcesso" class="form-label">Status do Processo *</label>
+                <select class="form-select" id="editAlunoStatusProcesso" required>
+                  <option value="PRE_CADASTRO">Pré-cadastro</option>
+                  <option value="EXAMES_APTOS">Exames Aptos</option>
+                  <option value="CURSO_TEORICO">Curso Teórico</option>
+                  <option value="TEORICO_CONCLUIDO">Teórico Concluído</option>
+                  <option value="EXAME_TEORICO_APROVADO">Exame Teórico Aprovado</option>
+                  <option value="CURSO_PRATICO">Curso Prático</option>
+                  <option value="PRATICO_CONCLUIDO">Prático Concluído</option>
+                  <option value="HABILITADO">Habilitado</option>
+                  <option value="BLOQUEADO">Bloqueado</option>
+                </select>
+              </div>
+              <div class="col-md-3">
+                <label for="editAlunoExameMedico" class="form-label">Exame Médico</label>
+                <select class="form-select" id="editAlunoExameMedico">
+                  <option value="PENDENTE">Pendente</option>
+                  <option value="APTO">Apto</option>
+                  <option value="INAPTO">Inapto</option>
+                </select>
+              </div>
+              <div class="col-md-3">
+                <label for="editAlunoExamePsico" class="form-label">Exame Psico</label>
+                <select class="form-select" id="editAlunoExamePsico">
+                  <option value="PENDENTE">Pendente</option>
+                  <option value="APTO">Apto</option>
+                  <option value="INAPTO">Inapto</option>
+                </select>
+              </div>
+              <div class="col-md-2">
+                <label for="editAlunoLadv" class="form-label">Nº LADV</label>
+                <input type="text" class="form-control" id="editAlunoLadv" placeholder="LADV-...">
+              </div>
+            </div>
+
+            <hr>
+            <h6 class="fw-bold text-secondary small mb-2">CARGAS HORÁRIAS CUMPRIDAS (DETRAN)</h6>
+            <div class="row g-3">
+              <div class="col-md-4">
+                <label for="editAlunoHorasTeoricas" class="form-label">Horas Teóricas (h / 45h) *</label>
+                <input type="number" class="form-control" id="editAlunoHorasTeoricas" min="0" required>
+              </div>
+              <div class="col-md-4">
+                <label for="editAlunoHorasPraticas" class="form-label">Horas Práticas Totais (h) *</label>
+                <input type="number" class="form-control" id="editAlunoHorasPraticas" min="0" required>
+              </div>
+              <div class="col-md-4">
+                <label for="editAlunoHorasNoturnas" class="form-label">Aulas Noturnas (h) *</label>
+                <input type="number" class="form-control" id="editAlunoHorasNoturnas" min="0" required>
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+            <button type="submit" class="btn btn-primary">
+              <i class="bi bi-save me-1"></i> Salvar Alterações
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
   <!-- MODAL: Cadastro de Novo Instrutor -->
   <div class="modal fade" id="modalNovoInstrutor" tabindex="-1" aria-labelledby="modalNovoInstrutorLabel" aria-hidden="true">
     <div class="modal-dialog modal-lg">
@@ -823,6 +950,71 @@
             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
             <button type="submit" class="btn btn-primary">
               <i class="bi bi-check-circle me-1"></i> Salvar Instrutor
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: Edição de Instrutor -->
+  <div class="modal fade" id="modalEditarInstrutor" tabindex="-1" aria-labelledby="modalEditarInstrutorLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title fw-bold" id="modalEditarInstrutorLabel"><i class="bi bi-pencil-square me-2 text-primary"></i>Editar Instrutor - DETRAN</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+        </div>
+        <form id="formEditarInstrutor" novalidate>
+          <input type="hidden" id="editInstId">
+          <div class="modal-body">
+            <div class="row g-3">
+              <div class="col-md-8">
+                <label for="editInstNome" class="form-label">Nome Completo *</label>
+                <input type="text" class="form-control" id="editInstNome" required minlength="3">
+              </div>
+              <div class="col-md-4">
+                <label for="editInstTipo" class="form-label">Especialidade / Tipo *</label>
+                <select class="form-select" id="editInstTipo" required>
+                  <option value="TEORICO">Instrutor Teórico</option>
+                  <option value="PRATICO">Instrutor Prático</option>
+                  <option value="AMBOS">Ambos (Teórico e Prático)</option>
+                </select>
+              </div>
+              <div class="col-md-4">
+                <label for="editInstCPF" class="form-label">CPF *</label>
+                <input type="text" class="form-control" id="editInstCPF" placeholder="000.000.000-00" required maxlength="14">
+              </div>
+              <div class="col-md-4">
+                <label for="editInstCredencial" class="form-label">Credencial DETRAN *</label>
+                <input type="text" class="form-control" id="editInstCredencial" required>
+              </div>
+              <div class="col-md-4">
+                <label for="editInstTelefone" class="form-label">Telefone Celular *</label>
+                <input type="text" class="form-control" id="editInstTelefone" placeholder="(11) 98888-7777" required maxlength="15">
+              </div>
+              <div class="col-md-6">
+                <label for="editInstEmail" class="form-label">E-mail</label>
+                <input type="email" class="form-control" id="editInstEmail" placeholder="instrutor@cfc.com">
+              </div>
+              <div class="col-md-4 d-flex align-items-center mt-4">
+                <div class="form-check form-switch">
+                  <input class="form-check-input" type="checkbox" id="editInstPesados">
+                  <label class="form-check-label fw-bold" for="editInstPesados">Veículos Pesados (Cat C, D, E)</label>
+                </div>
+              </div>
+              <div class="col-md-2 d-flex align-items-center mt-4">
+                <div class="form-check form-switch">
+                  <input class="form-check-input" type="checkbox" id="editInstAtivo" checked>
+                  <label class="form-check-label fw-bold" for="editInstAtivo">Ativo</label>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+            <button type="submit" class="btn btn-primary">
+              <i class="bi bi-save me-1"></i> Salvar Alterações
             </button>
           </div>
         </form>

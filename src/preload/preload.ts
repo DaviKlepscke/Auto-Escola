@@ -19,12 +19,16 @@ const api: IElectronAPI = {
   // Alunos
   listarAlunos: (filtro) => ipcRenderer.invoke('alunos:listar', filtro),
   salvarAluno: (aluno: Aluno) => ipcRenderer.invoke('alunos:salvar', aluno),
+  atualizarAluno: (aluno: Aluno) => ipcRenderer.invoke('alunos:atualizar', aluno),
+  deletarAluno: (id: number) => ipcRenderer.invoke('alunos:deletar', id),
   importarAlunosCSV: (alunos: Aluno[]) => ipcRenderer.invoke('alunos:importar-csv', alunos),
   obterCargaHoraria: (alunoId: number) => ipcRenderer.invoke('alunos:obter-carga-horaria', alunoId),
 
   // Instrutores
   listarInstrutores: () => ipcRenderer.invoke('instrutores:listar'),
   salvarInstrutor: (instrutor: Instrutor) => ipcRenderer.invoke('instrutores:salvar', instrutor),
+  atualizarInstrutor: (instrutor: Instrutor) => ipcRenderer.invoke('instrutores:atualizar', instrutor),
+  deletarInstrutor: (id: number) => ipcRenderer.invoke('instrutores:deletar', id),
   importarInstrutoresCSV: (instrutores: Instrutor[]) => ipcRenderer.invoke('instrutores:importar-csv', instrutores),
 
   // Frota / Veículos
@@ -32,6 +36,7 @@ const api: IElectronAPI = {
   salvarVeiculo: (veiculo: Veiculo) => ipcRenderer.invoke('veiculos:salvar', veiculo),
   atualizarKmVeiculo: (id: number, novoKm: number, registrarRevisao?: boolean) =>
     ipcRenderer.invoke('veiculos:atualizar-km', id, novoKm, registrarRevisao),
+  deletarVeiculo: (id: number) => ipcRenderer.invoke('veiculos:deletar', id),
   importarVeiculosCSV: (veiculos: Veiculo[]) => ipcRenderer.invoke('veiculos:importar-csv', veiculos),
 
   // Turmas e Salas (Limite de 20 alunos)

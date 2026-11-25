@@ -19,9 +19,33 @@ export function escapeHtml(text) {
 let csvTipoAtual = 'alunos';
 let dadosCSVValidados = [];
 let turmaSelecionadaId = null;
+let alunosCache = [];
+let instrutoresCache = [];
+
+function formatarDataInput(valor) {
+  if (!valor) return '';
+  if (valor instanceof Date && !isNaN(valor.getTime())) {
+    return valor.toISOString().slice(0, 10);
+  }
+  return String(valor).slice(0, 10);
+}
+
+async function recarregarVisoesRelacionadas() {
+  await Promise.all([
+    carregarDashboard(),
+    carregarAlunos(),
+    carregarInstrutores(),
+    carregarVeiculos(),
+    carregarTurmas(),
+    carregarAulasPraticas(),
+    carregarExames()
+  ]);
+}
 
 document.addEventListener('DOMContentLoaded', async () => {
   console.log('[Front-End] Inicializando interface de atendimento do CFC...');
+
+  configurarNavegacaoAbas();
 
   // Testar Conexão com o Banco Local / Remoto
   try {
@@ -50,7 +74,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Configurar Formulários e Ações
   configurarFormularioAluno();
+  configurarFormularioEditarAluno();
   configurarFormularioInstrutor();
+  configurarFormularioEditarInstrutor();
   configurarFormularioVeiculo();
   configurarFormularioAtualizarKm();
   configurarImportacaoCSV();
@@ -69,6 +95,45 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Notificações Automáticas 24h
   configurarDisparoNotificacoes();
 });
+
+// ================= NAVEGAÇÃO ENTRE ABAS (COM FALLBACK OFFLINE) =================
+function configurarNavegacaoAbas() {
+  const tabButtons = document.querySelectorAll('#mainTab button[data-bs-toggle="pill"]');
+  const pageTitle = document.getElementById('page-title');
+
+  const atualizarTitulo = (btn) => {
+    if (!pageTitle || !btn) return;
+    const target = btn.getAttribute('data-bs-target');
+    pageTitle.textContent = target === '#view-dashboard' ? 'Painel Operacional' : btn.textContent.trim();
+  };
+
+  tabButtons.forEach((btn) => {
+    // Atualiza título quando Bootstrap alternar a aba normalmente
+    btn.addEventListener('shown.bs.tab', () => atualizarTitulo(btn));
+
+    // Fallback caso Bootstrap JS (CDN) esteja indisponível (modo offline)
+    btn.addEventListener('click', () => {
+      if (typeof bootstrap !== 'undefined' && bootstrap.Tab) return;
+
+      const targetSelector = btn.getAttribute('data-bs-target');
+      const targetPane = targetSelector ? document.querySelector(targetSelector) : null;
+      if (!targetPane) return;
+
+      tabButtons.forEach((b) => {
+        b.classList.remove('active');
+        b.setAttribute('aria-selected', 'false');
+      });
+      document.querySelectorAll('#mainTabContent > .tab-pane').forEach((pane) => {
+        pane.classList.remove('show', 'active');
+      });
+
+      btn.classList.add('active');
+      btn.setAttribute('aria-selected', 'true');
+      targetPane.classList.add('show', 'active');
+      atualizarTitulo(btn);
+    });
+  });
+}
 
 // ================= DASHBOARD =================
 async function carregarDashboard() {
@@ -130,6 +195,7 @@ async function carregarAlunos() {
   const filtroStatus = document.getElementById('filtro-status-aluno')?.value;
 
   const alunos = await window.electronAPI.listarAlunos({ categoria: filtroCat, status: filtroStatus });
+  alunosCache = alunos;
   const tbody = document.querySelector('#tabela-alunos tbody');
   if (!tbody) return;
 
@@ -147,9 +213,17 @@ async function carregarAlunos() {
       <td>${escapeHtml(a.telefone)}</td>
       <td><span class="badge bg-info text-dark">${escapeHtml(a.status_processo)}</span></td>
       <td>
-        <button class="btn btn-sm btn-outline-primary btn-ver-carga-horaria" data-id="${a.id}" data-nome="${escapeHtml(a.nome)}" title="Ficha de Carga Horária DETRAN">
-          <i class="bi bi-person-lines-fill me-1"></i> Carga Horária
-        </button>
+        <div class="btn-group btn-group-sm">
+          <button class="btn btn-outline-primary btn-ver-carga-horaria" data-id="${a.id}" data-nome="${escapeHtml(a.nome)}" title="Ficha de Carga Horária DETRAN">
+            <i class="bi bi-person-lines-fill me-1"></i> Carga Horária
+          </button>
+          <button class="btn btn-outline-secondary btn-editar-aluno" data-id="${a.id}" title="Editar Dados e Cargas Horárias">
+            <i class="bi bi-pencil-square me-1"></i> Editar
+          </button>
+          <button class="btn btn-outline-danger btn-deletar-aluno" data-id="${a.id}" data-nome="${escapeHtml(a.nome)}" title="Deletar Aluno">
+            <i class="bi bi-trash"></i>
+          </button>
+        </div>
       </td>
     </tr>
   `).join('');
@@ -166,8 +240,8 @@ async function carregarAlunos() {
       const ch = await window.electronAPI.obterCargaHoraria(alunoId);
       container.innerHTML = `
         <div class="mb-3">
-          <h6 class="fw-bold mb-1">${ch.alunoNome}</h6>
-          <span class="badge bg-primary">Categoria ${ch.categoria}</span>
+          <h6 class="fw-bold mb-1">${escapeHtml(ch.alunoNome)}</h6>
+          <span class="badge bg-primary">Categoria ${escapeHtml(ch.categoria)}</span>
         </div>
 
         <div class="card p-3 mb-3 bg-light border-0">
@@ -177,7 +251,7 @@ async function carregarAlunos() {
             <span class="fw-bold">${ch.horasTeoricasCumpridas} / 45 h</span>
           </div>
           <div class="progress mb-2" style="height: 8px;">
-            <div class="progress-bar ${ch.prontoParaExameTeorico ? 'bg-success' : 'bg-primary'}" style="width: ${(ch.horasTeoricasCumpridas / 45) * 100}%"></div>
+            <div class="progress-bar ${ch.prontoParaExameTeorico ? 'bg-success' : 'bg-primary'}" style="width: ${Math.min(100, (ch.horasTeoricasCumpridas / 45) * 100)}%"></div>
           </div>
           <small class="text-muted">Disciplinas: Legislação (18h), Defensiva (16h), Primeiros Socorros (4h), Meio Ambiente (4h), Mecânica (3h).</small>
           <div class="mt-2">
@@ -206,27 +280,135 @@ async function carregarAlunos() {
       `;
     });
   });
+
+  tbody.querySelectorAll('.btn-editar-aluno').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      const alunoId = parseInt(e.currentTarget.getAttribute('data-id'), 10);
+      const aluno = alunosCache.find(a => a.id === alunoId);
+      if (!aluno) return;
+
+      const ch = await window.electronAPI.obterCargaHoraria(alunoId);
+
+      document.getElementById('editAlunoId').value = aluno.id;
+      document.getElementById('editAlunoNome').value = aluno.nome || '';
+      document.getElementById('editAlunoCategoria').value = aluno.categoria_pretendida || 'B';
+      document.getElementById('editAlunoCPF').value = aluno.cpf || '';
+      document.getElementById('editAlunoRG').value = aluno.rg || '';
+      document.getElementById('editAlunoRenach').value = aluno.renach || '';
+      document.getElementById('editAlunoNascimento').value = formatarDataInput(aluno.data_nascimento);
+      document.getElementById('editAlunoTelefone').value = aluno.telefone || '';
+      document.getElementById('editAlunoEmail').value = aluno.email || '';
+      document.getElementById('editAlunoStatusProcesso').value = aluno.status_processo || 'PRE_CADASTRO';
+      document.getElementById('editAlunoExameMedico').value = aluno.status_exame_medico || 'PENDENTE';
+      document.getElementById('editAlunoExamePsico').value = aluno.status_exame_psico || 'PENDENTE';
+      document.getElementById('editAlunoLadv').value = aluno.ladv_numero || '';
+      document.getElementById('editAlunoHorasTeoricas').value = aluno.horas_teoricas_cumpridas ?? ch.horasTeoricasCumpridas ?? 0;
+      document.getElementById('editAlunoHorasPraticas').value = aluno.horas_praticas_cumpridas ?? ch.horasPraticasCumpridas ?? 0;
+      document.getElementById('editAlunoHorasNoturnas').value = aluno.horas_noturnas_cumpridas ?? ch.horasNoturnasCumpridas ?? 0;
+
+      ['editAlunoCPF', 'editAlunoTelefone', 'editAlunoRenach', 'editAlunoNascimento'].forEach(id => {
+        document.getElementById(id)?.classList.remove('is-valid', 'is-invalid');
+      });
+
+      bootstrap.Modal.getOrCreateInstance(document.getElementById('modalEditarAluno')).show();
+    });
+  });
+
+  tbody.querySelectorAll('.btn-deletar-aluno').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      const alunoId = parseInt(e.currentTarget.getAttribute('data-id'), 10);
+      const nome = e.currentTarget.getAttribute('data-nome') || 'este aluno';
+      if (!confirm(`Tem certeza que deseja deletar o aluno "${nome}"?\nMatrículas, aulas práticas e exames vinculados também serão removidos.`)) {
+        return;
+      }
+
+      const res = await window.electronAPI.deletarAluno(alunoId);
+      if (res.success) {
+        alert('Aluno deletado com sucesso!');
+        await recarregarVisoesRelacionadas();
+      } else {
+        alert('Erro ao deletar aluno: ' + res.error);
+      }
+    });
+  });
 }
 
 // ================= INSTRUTORES =================
 async function carregarInstrutores() {
   if (!window.electronAPI) return;
   const inst = await window.electronAPI.listarInstrutores();
+  instrutoresCache = inst;
   const tbody = document.querySelector('#tabela-instrutores tbody');
   if (!tbody) return;
 
-  tbody.innerHTML = inst.map(i => `
-    <tr>
-      <td class="fw-bold">${escapeHtml(i.nome)}</td>
-      <td><code>${escapeHtml(i.credencial_detran)}</code></td>
-      <td><span class="badge ${i.tipo === 'TEORICO' ? 'bg-info text-dark' : 'bg-primary'}">${escapeHtml(i.tipo)}</span></td>
-      <td>
-        ${i.habilita_veiculos_pesados ? '<span class="badge bg-warning text-dark"><i class="bi bi-truck me-1"></i>Sim (Cat C, D, E)</span>' : '<span class="badge bg-light text-muted">Apenas Leves</span>'}
-      </td>
-      <td>${escapeHtml(i.telefone)}</td>
-      <td><span class="badge bg-success">Ativo</span></td>
-    </tr>
-  `).join('');
+  if (inst.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-3">Nenhum instrutor cadastrado.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = inst.map(i => {
+    const ativo = i.ativo !== false && i.ativo !== 0;
+    return `
+      <tr>
+        <td class="fw-bold">${escapeHtml(i.nome)}</td>
+        <td><code>${escapeHtml(i.credencial_detran)}</code></td>
+        <td><span class="badge ${i.tipo === 'TEORICO' ? 'bg-info text-dark' : 'bg-primary'}">${escapeHtml(i.tipo)}</span></td>
+        <td>
+          ${i.habilita_veiculos_pesados ? '<span class="badge bg-warning text-dark"><i class="bi bi-truck me-1"></i>Sim (Cat C, D, E)</span>' : '<span class="badge bg-light text-muted">Apenas Leves</span>'}
+        </td>
+        <td>${escapeHtml(i.telefone)}</td>
+        <td><span class="badge ${ativo ? 'bg-success' : 'bg-secondary'}">${ativo ? 'Ativo' : 'Inativo'}</span></td>
+        <td>
+          <div class="btn-group btn-group-sm">
+            <button class="btn btn-outline-secondary btn-editar-instrutor" data-id="${i.id}" title="Editar Instrutor">
+              <i class="bi bi-pencil-square me-1"></i> Editar
+            </button>
+            <button class="btn btn-outline-danger btn-deletar-instrutor" data-id="${i.id}" data-nome="${escapeHtml(i.nome)}" title="Deletar Instrutor">
+              <i class="bi bi-trash"></i>
+            </button>
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join('');
+
+  tbody.querySelectorAll('.btn-editar-instrutor').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const instId = parseInt(e.currentTarget.getAttribute('data-id'), 10);
+      const instrutor = instrutoresCache.find(i => i.id === instId);
+      if (!instrutor) return;
+
+      document.getElementById('editInstId').value = instrutor.id;
+      document.getElementById('editInstNome').value = instrutor.nome || '';
+      document.getElementById('editInstTipo').value = instrutor.tipo || 'PRATICO';
+      document.getElementById('editInstCPF').value = instrutor.cpf || '';
+      document.getElementById('editInstCredencial').value = instrutor.credencial_detran || '';
+      document.getElementById('editInstTelefone').value = instrutor.telefone || '';
+      document.getElementById('editInstEmail').value = instrutor.email || '';
+      document.getElementById('editInstPesados').checked = Boolean(instrutor.habilita_veiculos_pesados);
+      document.getElementById('editInstAtivo').checked = instrutor.ativo !== false && instrutor.ativo !== 0;
+
+      bootstrap.Modal.getOrCreateInstance(document.getElementById('modalEditarInstrutor')).show();
+    });
+  });
+
+  tbody.querySelectorAll('.btn-deletar-instrutor').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      const instId = parseInt(e.currentTarget.getAttribute('data-id'), 10);
+      const nome = e.currentTarget.getAttribute('data-nome') || 'este instrutor';
+      if (!confirm(`Tem certeza que deseja deletar o instrutor "${nome}"?`)) {
+        return;
+      }
+
+      const res = await window.electronAPI.deletarInstrutor(instId);
+      if (res.success) {
+        alert('Instrutor deletado com sucesso!');
+        await recarregarVisoesRelacionadas();
+      } else {
+        alert('Erro ao deletar instrutor: ' + res.error);
+      }
+    });
+  });
 }
 
 // ================= VEÍCULOS & FROTA =================
@@ -236,11 +418,16 @@ async function carregarVeiculos() {
   const tbody = document.querySelector('#tabela-veiculos tbody');
   if (!tbody) return;
 
+  if (veics.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-3">Nenhum veículo cadastrado na frota.</td></tr>';
+    return;
+  }
+
   tbody.innerHTML = veics.map(v => `
     <tr>
-      <td><strong><code>${v.placa}</code></strong></td>
-      <td>${v.modelo} (${v.ano})</td>
-      <td><span class="badge bg-dark">Cat ${v.categoria}</span></td>
+      <td><strong><code>${escapeHtml(v.placa)}</code></strong></td>
+      <td>${escapeHtml(v.modelo)} (${escapeHtml(v.ano)})</td>
+      <td><span class="badge bg-dark">Cat ${escapeHtml(v.categoria)}</span></td>
       <td>${Number(v.km_atual).toLocaleString()} km</td>
       <td>${Number(v.km_ultima_revisao).toLocaleString()} km</td>
       <td>
@@ -249,9 +436,14 @@ async function carregarVeiculos() {
           : '<span class="badge bg-success">Operacional</span>'}
       </td>
       <td>
-        <button class="btn btn-sm btn-outline-primary btn-abrir-atualizar-km" data-id="${v.id}" data-placa="${v.placa}" data-modelo="${v.modelo}" data-km="${v.km_atual}">
-          <i class="bi bi-speedometer2 me-1"></i> KM / Revisão
-        </button>
+        <div class="btn-group btn-group-sm">
+          <button class="btn btn-outline-primary btn-abrir-atualizar-km" data-id="${v.id}" data-placa="${escapeHtml(v.placa)}" data-modelo="${escapeHtml(v.modelo)}" data-km="${v.km_atual}">
+            <i class="bi bi-speedometer2 me-1"></i> KM / Revisão
+          </button>
+          <button class="btn btn-outline-danger btn-deletar-veiculo" data-id="${v.id}" data-placa="${escapeHtml(v.placa)}" data-modelo="${escapeHtml(v.modelo)}" title="Deletar Veículo">
+            <i class="bi bi-trash"></i>
+          </button>
+        </div>
       </td>
     </tr>
   `).join('');
@@ -265,6 +457,25 @@ async function carregarVeiculos() {
       document.getElementById('checkRegistrarRevisao').checked = false;
       const modal = new bootstrap.Modal(document.getElementById('modalAtualizarKm'));
       modal.show();
+    });
+  });
+
+  tbody.querySelectorAll('.btn-deletar-veiculo').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      const veiculoId = parseInt(e.currentTarget.getAttribute('data-id'), 10);
+      const placa = e.currentTarget.getAttribute('data-placa') || '';
+      const modelo = e.currentTarget.getAttribute('data-modelo') || '';
+      if (!confirm(`Tem certeza que deseja deletar o veículo "${modelo} (${placa})"?\nAulas práticas vinculadas a este veículo também serão removidas.`)) {
+        return;
+      }
+
+      const res = await window.electronAPI.deletarVeiculo(veiculoId);
+      if (res.success) {
+        alert('Veículo deletado da frota com sucesso!');
+        await recarregarVisoesRelacionadas();
+      } else {
+        alert('Erro ao deletar veículo: ' + res.error);
+      }
     });
   });
 }
@@ -754,6 +965,92 @@ function configurarFormularioAluno() {
   });
 }
 
+function configurarFormularioEditarAluno() {
+  const form = document.getElementById('formEditarAluno');
+  if (!form) return;
+
+  const inputCPF = document.getElementById('editAlunoCPF');
+  const inputTelefone = document.getElementById('editAlunoTelefone');
+  const inputRenach = document.getElementById('editAlunoRenach');
+  const inputNascimento = document.getElementById('editAlunoNascimento');
+  const inputCategoria = document.getElementById('editAlunoCategoria');
+
+  inputCPF.addEventListener('input', (e) => {
+    e.target.value = Validators.mascaraCPF(e.target.value);
+    const valido = Validators.validarCPF(e.target.value);
+    Validators.setFieldStatus(e.target, valido, document.getElementById('feedbackEditCPF'), 'CPF inválido.');
+  });
+
+  inputTelefone.addEventListener('input', (e) => {
+    e.target.value = Validators.mascaraTelefone(e.target.value);
+    const valido = Validators.validarTelefone(e.target.value);
+    Validators.setFieldStatus(e.target, valido, document.getElementById('feedbackEditTelefone'), 'Telefone celular inválido.');
+  });
+
+  inputRenach.addEventListener('input', (e) => {
+    const valido = Validators.validarRenach(e.target.value);
+    Validators.setFieldStatus(e.target, valido, document.getElementById('feedbackEditRenach'), 'RENACH inválido.');
+  });
+
+  inputNascimento.addEventListener('change', (e) => {
+    const valido = Validators.validarIdadeMinima(e.target.value, inputCategoria.value);
+    Validators.setFieldStatus(e.target, valido, document.getElementById('feedbackEditNascimento'), 'Idade mínima não atingida.');
+  });
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (!Validators.validarCPF(inputCPF.value) || !Validators.validarTelefone(inputTelefone.value)) {
+      alert('Corrija o CPF e/ou Telefone antes de salvar.');
+      return;
+    }
+    if (!Validators.validarRenach(inputRenach.value)) {
+      alert('Formato de RENACH inválido.');
+      return;
+    }
+    if (!Validators.validarIdadeMinima(inputNascimento.value, inputCategoria.value)) {
+      alert('Idade mínima legal não atingida para a categoria selecionada.');
+      return;
+    }
+
+    const horasTeoricas = Math.max(0, parseInt(document.getElementById('editAlunoHorasTeoricas').value, 10) || 0);
+    const horasPraticas = Math.max(0, parseInt(document.getElementById('editAlunoHorasPraticas').value, 10) || 0);
+    const horasNoturnas = Math.max(0, parseInt(document.getElementById('editAlunoHorasNoturnas').value, 10) || 0);
+
+    if (horasNoturnas > horasPraticas) {
+      alert('A quantidade de aulas noturnas não pode ser maior que o total de aulas práticas.');
+      return;
+    }
+
+    const aluno = {
+      id: parseInt(document.getElementById('editAlunoId').value, 10),
+      nome: document.getElementById('editAlunoNome').value.trim(),
+      cpf: inputCPF.value,
+      rg: document.getElementById('editAlunoRG').value.trim(),
+      renach: inputRenach.value.trim() || undefined,
+      data_nascimento: inputNascimento.value,
+      telefone: inputTelefone.value,
+      email: document.getElementById('editAlunoEmail').value.trim(),
+      categoria_pretendida: inputCategoria.value,
+      status_processo: document.getElementById('editAlunoStatusProcesso').value,
+      status_exame_medico: document.getElementById('editAlunoExameMedico').value,
+      status_exame_psico: document.getElementById('editAlunoExamePsico').value,
+      ladv_numero: document.getElementById('editAlunoLadv').value.trim() || undefined,
+      horas_teoricas_cumpridas: horasTeoricas,
+      horas_praticas_cumpridas: horasPraticas,
+      horas_noturnas_cumpridas: horasNoturnas
+    };
+
+    const res = await window.electronAPI.atualizarAluno(aluno);
+    if (res.success) {
+      alert('Dados e cargas horárias do aluno atualizados com sucesso!');
+      bootstrap.Modal.getInstance(document.getElementById('modalEditarAluno'))?.hide();
+      await recarregarVisoesRelacionadas();
+    } else {
+      alert('Erro ao atualizar aluno: ' + res.error);
+    }
+  });
+}
+
 function configurarFormularioInstrutor() {
   const form = document.getElementById('formNovoInstrutor');
   if (!form) return;
@@ -795,6 +1092,54 @@ function configurarFormularioInstrutor() {
       await carregarInstrutores();
     } else {
       alert('Erro ao salvar instrutor: ' + res.error);
+    }
+  });
+}
+
+function configurarFormularioEditarInstrutor() {
+  const form = document.getElementById('formEditarInstrutor');
+  if (!form) return;
+
+  const inputCPF = document.getElementById('editInstCPF');
+  const inputTel = document.getElementById('editInstTelefone');
+
+  inputCPF.addEventListener('input', (e) => {
+    e.target.value = Validators.mascaraCPF(e.target.value);
+  });
+  inputTel.addEventListener('input', (e) => {
+    e.target.value = Validators.mascaraTelefone(e.target.value);
+  });
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (!Validators.validarCPF(inputCPF.value)) {
+      alert('CPF do instrutor inválido.');
+      return;
+    }
+    if (!Validators.validarTelefone(inputTel.value)) {
+      alert('Telefone do instrutor inválido.');
+      return;
+    }
+
+    const inst = {
+      id: parseInt(document.getElementById('editInstId').value, 10),
+      nome: document.getElementById('editInstNome').value.trim(),
+      cpf: inputCPF.value,
+      credencial_detran: document.getElementById('editInstCredencial').value.trim(),
+      telefone: inputTel.value,
+      email: document.getElementById('editInstEmail').value.trim() || undefined,
+      tipo: document.getElementById('editInstTipo').value,
+      habilita_veiculos_pesados: document.getElementById('editInstPesados').checked,
+      ativo: document.getElementById('editInstAtivo').checked
+    };
+
+    const res = await window.electronAPI.atualizarInstrutor(inst);
+    if (res.success) {
+      alert('Instrutor atualizado com sucesso!');
+      bootstrap.Modal.getInstance(document.getElementById('modalEditarInstrutor'))?.hide();
+      await recarregarVisoesRelacionadas();
+    } else {
+      alert('Erro ao atualizar instrutor: ' + res.error);
     }
   });
 }
@@ -859,7 +1204,7 @@ function configurarFormularioAtualizarKm() {
 
 function configurarImportacaoCSV() {
   const modalEl = document.getElementById('modalImportarCSV');
-  const modal = new bootstrap.Modal(modalEl);
+  const getModal = () => (typeof bootstrap !== 'undefined' && bootstrap.Modal ? bootstrap.Modal.getOrCreateInstance(modalEl) : null);
   const inputArquivo = document.getElementById('inputArquivoCSV');
   const btnConfirmar = document.getElementById('btn-confirmar-import-csv');
   const btnTemplate = document.getElementById('btn-baixar-template-csv');
@@ -873,7 +1218,7 @@ function configurarImportacaoCSV() {
       document.getElementById('preview-csv-body').innerHTML = '<tr><td colspan="4" class="text-center text-muted py-4">Selecione um arquivo CSV para validação preliminar.</td></tr>';
       btnConfirmar.disabled = true;
       dadosCSVValidados = [];
-      modal.show();
+      getModal()?.show();
     });
   });
 
@@ -920,7 +1265,7 @@ function configurarImportacaoCSV() {
     }
 
     await carregarDashboard();
-    modal.hide();
+    getModal()?.hide();
     btnConfirmar.disabled = false;
     btnConfirmar.innerHTML = '<i class="bi bi-cloud-arrow-up-fill me-1"></i> Confirmar Importação';
 
